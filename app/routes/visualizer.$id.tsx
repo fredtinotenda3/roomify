@@ -3,16 +3,31 @@
 import { useNavigate, useOutletContext, useParams} from "react-router";
 import {useEffect, useRef, useState} from "react";
 import {generate3DView} from "../../lib/ai.action";
-import {AlertCircle, Box, Download, FileText, RefreshCcw, Share2, X} from "lucide-react";
+import {AlertCircle, Box, Download, FileText, RefreshCcw, Share2, X, Crown, Lock} from "lucide-react";
 import Button from "../../components/ui/Button";
 import StyleSelector from "../../components/StyleSelector";
 import PresetSelector from "../../components/PresetSelector";
+import UpgradeModal from "../../components/UpgradeModal";
 import {createProject, getProjectById} from "../../lib/puter.action";
 import {ReactCompareSlider, ReactCompareSliderImage} from "react-compare-slider";
 import type { DesignStyle } from "../../lib/types";
 import type { PresetCategory } from "../../lib/presets";
 import { STYLE_OPTIONS } from "../../lib/constants";
 import { exportToPDF } from "../../lib/pdf.export";
+import { addWatermark } from "../../lib/watermark";
+import { 
+    checkRenderLimit, 
+    checkExportLimit, 
+    checkPDFExportLimit,
+    checkHighResAccess,
+    checkPremiumStyle,
+    checkPremiumPreset,
+    incrementRenderCount,
+    incrementExportCount,
+    incrementPDFExportCount,
+    getRemainingUsage,
+    USAGE_LIMITS
+} from "../../lib/usage.tracker";
 
 const VisualizerId = () => {
     const { id } = useParams();
@@ -32,14 +47,51 @@ const VisualizerId = () => {
     const [selectedPreset, setSelectedPreset] = useState<PresetCategory>('budget');
     const [isGeneratingNewStyle, setIsGeneratingNewStyle] = useState(false);
     const [generationProgress, setGenerationProgress] = useState(0);
+    const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+    const [upgradeFeature, setUpgradeFeature] = useState<string>('');
+    const [usageInfo, setUsageInfo] = useState<{
+        rendersRemaining: number;
+        exportsRemaining: number;
+        pdfExportsRemaining: number;
+        isPremium: boolean;
+    } | null>(null);
 
     const handleBack = () => navigate('/');
-    
-    const handleExport = () => {
+
+    // Load usage info
+    const loadUsageInfo = async () => {
+        if (userId) {
+            const usage = await getRemainingUsage(userId);
+            setUsageInfo(usage);
+        }
+    };
+
+    useEffect(() => {
+        loadUsageInfo();
+    }, [userId]);
+
+    const handleExport = async () => {
         if (!currentImage) return;
 
+        // Check export limit
+        if (userId) {
+            const limitCheck = await checkExportLimit(userId);
+            if (!limitCheck.allowed) {
+                setUpgradeFeature('exports');
+                setShowUpgradeModal(true);
+                return;
+            }
+            
+            // Increment export count
+            await incrementExportCount(userId);
+            await loadUsageInfo();
+        }
+
+        // Apply watermark if needed
+        const finalImage = await addWatermark(currentImage, usageInfo?.isPremium || false);
+        
         const link = document.createElement('a');
-        link.href = currentImage;
+        link.href = finalImage;
         link.download = `roomify-${id || 'design'}-${selectedStyle}-${selectedPreset}.png`;
         document.body.appendChild(link);
         link.click();
@@ -52,6 +104,20 @@ const VisualizerId = () => {
             return;
         }
         
+        // Check PDF export limit
+        if (userId) {
+            const limitCheck = await checkPDFExportLimit(userId);
+            if (!limitCheck.allowed) {
+                setUpgradeFeature('PDF exports');
+                setShowUpgradeModal(true);
+                return;
+            }
+            
+            // Increment PDF export count
+            await incrementPDFExportCount(userId);
+            await loadUsageInfo();
+        }
+        
         try {
             const styleName = STYLE_OPTIONS.find(s => s.id === selectedStyle)?.name || selectedStyle;
             const presetName = getPresetName(selectedPreset);
@@ -61,10 +127,13 @@ const VisualizerId = () => {
                 day: 'numeric'
             });
             
+            // Apply watermark to image for PDF if needed
+            const watermarkedImage = await addWatermark(currentImage, usageInfo?.isPremium || false);
+            
             await exportToPDF({
                 title: project?.name || `Residence ${id}`,
                 beforeImage: project.sourceImage,
-                afterImage: currentImage,
+                afterImage: watermarkedImage,
                 styleName: `${styleName} - ${presetName}`,
                 date: date,
                 projectId: id || 'unknown'
@@ -96,12 +165,21 @@ const VisualizerId = () => {
     const handleStyleChange = async (style: DesignStyle) => {
         if (!project || !project.sourceImage) return;
         
+        // Check if style is premium
+        const isStylePremium = !checkPremiumStyle(style);
+        if (isStylePremium && usageInfo && !usageInfo.isPremium) {
+            setUpgradeFeature('premium styles');
+            setShowUpgradeModal(true);
+            return;
+        }
+        
         setSelectedStyle(style);
         
         // Check if we already have this style + preset combination rendered
         const cacheKey = `${style}-${selectedPreset}`;
         if (project.renderedPresets && project.renderedPresets[cacheKey]) {
-            setCurrentImage(project.renderedPresets[cacheKey]);
+            const watermarked = await addWatermark(project.renderedPresets[cacheKey], usageInfo?.isPremium || false);
+            setCurrentImage(watermarked);
             return;
         }
         
@@ -125,7 +203,9 @@ const VisualizerId = () => {
             });
             
             if (result.renderedImage) {
-                setCurrentImage(result.renderedImage);
+                // Apply watermark for free users
+                const watermarkedImage = await addWatermark(result.renderedImage, usageInfo?.isPremium || false);
+                setCurrentImage(watermarkedImage);
                 setGenerationProgress(100);
                 
                 // Update project with new style
@@ -163,12 +243,21 @@ const VisualizerId = () => {
     const handlePresetChange = async (preset: PresetCategory) => {
         if (!project || !project.sourceImage) return;
         
+        // Check if preset is premium
+        const isPresetPremium = !checkPremiumPreset(preset);
+        if (isPresetPremium && usageInfo && !usageInfo.isPremium) {
+            setUpgradeFeature('premium presets');
+            setShowUpgradeModal(true);
+            return;
+        }
+        
         setSelectedPreset(preset);
         
         // Check if we already have this preset + style combination rendered
         const cacheKey = `${selectedStyle}-${preset}`;
         if (project.renderedPresets && project.renderedPresets[cacheKey]) {
-            setCurrentImage(project.renderedPresets[cacheKey]);
+            const watermarked = await addWatermark(project.renderedPresets[cacheKey], usageInfo?.isPremium || false);
+            setCurrentImage(watermarked);
             return;
         }
         
@@ -192,7 +281,9 @@ const VisualizerId = () => {
             });
             
             if (result.renderedImage) {
-                setCurrentImage(result.renderedImage);
+                // Apply watermark for free users
+                const watermarkedImage = await addWatermark(result.renderedImage, usageInfo?.isPremium || false);
+                setCurrentImage(watermarkedImage);
                 setGenerationProgress(100);
                 
                 // Update project with new preset
@@ -225,6 +316,16 @@ const VisualizerId = () => {
     const runGeneration = async (item: DesignItem, style: DesignStyle = selectedStyle, preset: PresetCategory = selectedPreset) => {
         if(!id || !item.sourceImage) return;
 
+        // Check render limit before generation
+        if (userId) {
+            const limitCheck = await checkRenderLimit(userId);
+            if (!limitCheck.allowed) {
+                setUpgradeFeature('renders');
+                setShowUpgradeModal(true);
+                return;
+            }
+        }
+
         try {
             setIsProcessing(true);
             setGenerationError(null);
@@ -243,8 +344,17 @@ const VisualizerId = () => {
 
             if(result.renderedImage) {
                 console.log('Generation successful, saving result...');
-                setCurrentImage(result.renderedImage);
+                
+                // Apply watermark for free users
+                const watermarkedImage = await addWatermark(result.renderedImage, usageInfo?.isPremium || false);
+                setCurrentImage(watermarkedImage);
                 setGenerationProgress(100);
+
+                // Increment render count
+                if (userId) {
+                    await incrementRenderCount(userId);
+                    await loadUsageInfo();
+                }
 
                 const updatedItem = {
                     ...item,
@@ -269,7 +379,6 @@ const VisualizerId = () => {
 
                 if(saved) {
                     setProject(saved);
-                    setCurrentImage(saved.renderedImage || result.renderedImage);
                 }
             } else {
                 throw new Error('No rendered image in response');
@@ -326,7 +435,9 @@ const VisualizerId = () => {
             }
             
             if (fetchedProject?.renderedImage) {
-                setCurrentImage(fetchedProject.renderedImage);
+                // Apply watermark to existing image if needed
+                const watermarked = await addWatermark(fetchedProject.renderedImage, usageInfo?.isPremium || false);
+                setCurrentImage(watermarked);
             }
             
             setIsProjectLoading(false);
@@ -349,7 +460,11 @@ const VisualizerId = () => {
             return;
 
         if (project.renderedImage) {
-            setCurrentImage(project.renderedImage);
+            const applyWatermarkToExisting = async () => {
+                const watermarked = await addWatermark(project.renderedImage!, usageInfo?.isPremium || false);
+                setCurrentImage(watermarked);
+            };
+            applyWatermarkToExisting();
             hasInitialGenerated.current = true;
             return;
         }
@@ -387,6 +502,13 @@ const VisualizerId = () => {
     const isAnyProcessing = isProcessing || isGeneratingNewStyle;
     const currentStyleName = STYLE_OPTIONS.find(s => s.id === selectedStyle)?.name || selectedStyle;
     const currentPresetName = getPresetName(selectedPreset);
+    
+    const isStylePremium = !checkPremiumStyle(selectedStyle);
+    const isPresetPremium = !checkPremiumPreset(selectedPreset);
+    const showPremiumBadge = (isStylePremium || isPresetPremium) && usageInfo && !usageInfo.isPremium;
+
+    // Check if current image has watermark (free users)
+    const hasWatermark = !usageInfo?.isPremium && currentImage;
 
     return (
         <div className="visualizer">
@@ -395,9 +517,23 @@ const VisualizerId = () => {
                     <Box className="logo" />
                     <span className="name">Roomify</span>
                 </div>
-                <Button variant="ghost" size="sm" onClick={handleBack} className="exit">
-                    <X className="icon" /> Exit Editor
-                </Button>
+                <div className="right-actions">
+                    {usageInfo && !usageInfo.isPremium && (
+                        <button 
+                            className="premium-badge-btn"
+                            onClick={() => {
+                                setUpgradeFeature('');
+                                setShowUpgradeModal(true);
+                            }}
+                        >
+                            <Crown size={16} />
+                            <span>Upgrade to Pro - $19/mo</span>
+                        </button>
+                    )}
+                    <Button variant="ghost" size="sm" onClick={handleBack} className="exit">
+                        <X className="icon" /> Exit Editor
+                    </Button>
+                </div>
             </nav>
 
             <section className="content">
@@ -408,6 +544,16 @@ const VisualizerId = () => {
                             <h2>{project?.name || `Residence ${id}`}</h2>
                             <p className="note">
                                 Created by You • Style: {currentStyleName} • Preset: {currentPresetName}
+                                {showPremiumBadge && (
+                                    <span className="premium-badge-text">
+                                        <Lock size={12} /> Premium
+                                    </span>
+                                )}
+                                {hasWatermark && (
+                                    <span className="watermark-badge">
+                                        Watermark • Upgrade to remove
+                                    </span>
+                                )}
                             </p>
                         </div>
 
@@ -443,6 +589,26 @@ const VisualizerId = () => {
                         </div>
                     </div>
 
+                    {/* Usage Info Bar */}
+                    {usageInfo && !usageInfo.isPremium && (
+                        <div className="usage-info-bar">
+                            <div className="usage-stats">
+                                <span>🎨 {usageInfo.rendersRemaining === Infinity ? '∞' : usageInfo.rendersRemaining} renders left</span>
+                                <span>📄 {usageInfo.exportsRemaining === Infinity ? '∞' : usageInfo.exportsRemaining} exports left</span>
+                                <span>📑 {usageInfo.pdfExportsRemaining === Infinity ? '∞' : usageInfo.pdfExportsRemaining} PDFs left</span>
+                            </div>
+                            <button 
+                                className="upgrade-link-bar"
+                                onClick={() => {
+                                    setUpgradeFeature('');
+                                    setShowUpgradeModal(true);
+                                }}
+                            >
+                                Upgrade to Pro - $19/mo <Crown size={14} />
+                            </button>
+                        </div>
+                    )}
+
                     {/* Style Selector Section */}
                     <div className="style-section">
                         <StyleSelector 
@@ -465,7 +631,7 @@ const VisualizerId = () => {
                         {currentImage ? (
                             <img src={currentImage} alt={`AI Render - ${currentStyleName} - ${currentPresetName}`} className="render-img" />
                         ) : generationError ? (
-                            <div className="render-placeholder flex flex-col items-center justify-center min-h-100">
+                            <div className="render-placeholder flex flex-col items-center justify-center min-h-[400px]">
                                 <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
                                 <p className="text-red-600 mb-2 font-semibold">Generation Failed</p>
                                 <p className="text-zinc-600 text-sm mb-4 text-center max-w-md">{generationError}</p>
@@ -558,7 +724,106 @@ const VisualizerId = () => {
                 </div>
             </section>
 
+            <UpgradeModal 
+                isOpen={showUpgradeModal}
+                onClose={() => setShowUpgradeModal(false)}
+                featureName={upgradeFeature}
+            />
+
             <style>{`
+                .right-actions {
+                    display: flex;
+                    align-items: center;
+                    gap: 1rem;
+                }
+                
+                .premium-badge-btn {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+                    color: white;
+                    border: none;
+                    padding: 0.5rem 1rem;
+                    border-radius: 0.5rem;
+                    font-size: 0.75rem;
+                    font-weight: bold;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                }
+                
+                .premium-badge-btn:hover {
+                    transform: scale(1.05);
+                    background: linear-gradient(135deg, #f59e0b, #d97706);
+                }
+                
+                .premium-badge-text {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 0.25rem;
+                    background: #fef3c7;
+                    color: #d97706;
+                    padding: 0.125rem 0.5rem;
+                    border-radius: 0.25rem;
+                    font-size: 0.7rem;
+                    font-weight: 500;
+                    margin-left: 0.5rem;
+                }
+                
+                .watermark-badge {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 0.25rem;
+                    background: #e0e7ff;
+                    color: #4f46e5;
+                    padding: 0.125rem 0.5rem;
+                    border-radius: 0.25rem;
+                    font-size: 0.7rem;
+                    font-weight: 500;
+                    margin-left: 0.5rem;
+                }
+                
+                .usage-info-bar {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 0.75rem 1.5rem;
+                    background: #fef3c7;
+                    border-bottom: 1px solid #fde68a;
+                    font-size: 0.75rem;
+                }
+                
+                .usage-stats {
+                    display: flex;
+                    gap: 1.5rem;
+                    color: #92400e;
+                }
+                
+                .usage-stats span {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.25rem;
+                }
+                
+                .upgrade-link-bar {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    background: #f97316;
+                    color: white;
+                    border: none;
+                    padding: 0.375rem 0.75rem;
+                    border-radius: 0.5rem;
+                    font-size: 0.7rem;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                }
+                
+                .upgrade-link-bar:hover {
+                    background: #ea580c;
+                }
+                
                 .style-section {
                     padding: 1rem 1.5rem;
                     border-bottom: 1px solid #f3f4f6;
@@ -602,10 +867,26 @@ const VisualizerId = () => {
                     .style-section, .preset-section {
                         padding: 0.75rem 1rem;
                     }
+                    
+                    .usage-info-bar {
+                        flex-direction: column;
+                        gap: 0.5rem;
+                        text-align: center;
+                    }
+                    
+                    .usage-stats {
+                        flex-wrap: wrap;
+                        justify-content: center;
+                        gap: 0.75rem;
+                    }
+                    
+                    .right-actions {
+                        gap: 0.5rem;
+                    }
                 }
             `}</style>
         </div>
     )
 }
 
-export default VisualizerId
+export default VisualizerId;
