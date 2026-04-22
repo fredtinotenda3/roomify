@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Search, Heart, Eye, Clock, Filter, X, Grid3X3, List } from 'lucide-react';
+import { Search, Heart, Eye, Clock, Filter, X, Grid3X3, List, Sparkles } from 'lucide-react';
 import Button from './ui/Button';
+import EmailCaptureModal from './EmailCaptureModal';
 import { getPublicGallery, likeProject } from '../lib/puter.action';
 import type { PublicProject, GalleryFilter } from '../lib/types';
 import { STYLE_OPTIONS } from '../lib/constants';
@@ -16,6 +17,8 @@ const PublicGallery = () => {
     const [filter, setFilter] = useState<GalleryFilter>({ sortBy: 'recent' });
     const [showFilters, setShowFilters] = useState(false);
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+    const [showEmailCapture, setShowEmailCapture] = useState(false);
+    const [captureReason, setCaptureReason] = useState<'gallery_view' | 'save_project' | 'create_project' | 'view_count'>('gallery_view');
 
     const loadGallery = async () => {
         setLoading(true);
@@ -28,14 +31,45 @@ const PublicGallery = () => {
         loadGallery();
     }, [filter]);
 
+    // Show email capture after viewing designs
+    useEffect(() => {
+        const hasSeenCapture = localStorage.getItem('roomify_capture_shown');
+        const hasEmail = localStorage.getItem('roomify_captured_email');
+        
+        if (!hasEmail && !hasSeenCapture && projects.length > 0 && !loading) {
+            const timer = setTimeout(() => {
+                setCaptureReason('gallery_view');
+                setShowEmailCapture(true);
+                localStorage.setItem('roomify_capture_shown', 'true');
+            }, 3000);
+            
+            return () => clearTimeout(timer);
+        }
+    }, [projects, loading]);
+
     const handleLike = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
+        
+        const hasEmail = localStorage.getItem('roomify_captured_email');
+        
+        if (!hasEmail) {
+            setCaptureReason('view_count');
+            setShowEmailCapture(true);
+            return;
+        }
+        
         const result = await likeProject(id, true);
         if (result.success) {
             setProjects(projects.map(p => 
                 p.id === id ? { ...p, likeCount: result.likeCount, isLiked: true } : p
             ));
         }
+    };
+
+    const handleEmailCaptureSuccess = (email: string) => {
+        console.log('Email captured:', email);
+        setShowEmailCapture(false);
+        // Here you would send to your backend/CRM
     };
 
     const formatDate = (timestamp: number) => {
@@ -213,6 +247,13 @@ const PublicGallery = () => {
                     ))}
                 </div>
             )}
+
+            <EmailCaptureModal 
+                isOpen={showEmailCapture}
+                onClose={() => setShowEmailCapture(false)}
+                onSuccess={handleEmailCaptureSuccess}
+                triggerReason={captureReason}
+            />
 
             <style>{`
                 .public-gallery {

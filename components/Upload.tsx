@@ -6,6 +6,7 @@ import { CheckCircle2, ImageIcon, UploadIcon, Lock } from "lucide-react";
 import { PROGRESS_INCREMENT, REDIRECT_DELAY_MS, PROGRESS_INTERVAL_MS } from "../lib/constants";
 import { checkRenderLimit, incrementRenderCount, getRemainingUsage } from "../lib/usage.tracker";
 import UpgradeModal from './UpgradeModal';
+import EmailCaptureModal from './EmailCaptureModal';
 
 interface UploadProps {
     onComplete?: (base64Data: string) => void;
@@ -16,9 +17,11 @@ const Upload = ({ onComplete }: UploadProps) => {
     const [isDragging, setIsDragging] = useState(false);
     const [progress, setProgress] = useState(0);
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+    const [showEmailCapture, setShowEmailCapture] = useState(false);
     const [usageInfo, setUsageInfo] = useState<{ remaining: number; isPremium: boolean } | null>(null);
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const [pendingFile, setPendingFile] = useState<File | null>(null);
 
     const { isSignedIn, userId } = useOutletContext<AuthContext>();
 
@@ -49,6 +52,15 @@ const Upload = ({ onComplete }: UploadProps) => {
     }, []);
 
     const processFile = useCallback(async (file: File) => {
+        // Check if user has email captured
+        const hasEmail = localStorage.getItem('roomify_captured_email');
+        
+        if (!hasEmail && !isSignedIn) {
+            setPendingFile(file);
+            setShowEmailCapture(true);
+            return;
+        }
+        
         if (!isSignedIn) {
             alert('Please sign in to upload floor plans');
             return;
@@ -102,6 +114,15 @@ const Upload = ({ onComplete }: UploadProps) => {
         };
         reader.readAsDataURL(file);
     }, [isSignedIn, userId, onComplete]);
+
+    const handleEmailCaptureSuccess = (email: string) => {
+        console.log('Email captured:', email);
+        setShowEmailCapture(false);
+        if (pendingFile) {
+            processFile(pendingFile);
+            setPendingFile(null);
+        }
+    };
 
     const handleDragOver = (e: React.DragEvent) => {
         e.preventDefault();
@@ -226,6 +247,16 @@ const Upload = ({ onComplete }: UploadProps) => {
                 onClose={() => setShowUpgradeModal(false)}
                 featureName="renders"
                 remaining={usageInfo?.remaining === -1 ? undefined : usageInfo?.remaining}
+            />
+
+            <EmailCaptureModal 
+                isOpen={showEmailCapture}
+                onClose={() => {
+                    setShowEmailCapture(false);
+                    setPendingFile(null);
+                }}
+                onSuccess={handleEmailCaptureSuccess}
+                triggerReason="create_project"
             />
 
             <style>{`

@@ -10,6 +10,7 @@ import PresetSelector from "../../components/PresetSelector";
 import UpgradeModal from "../../components/UpgradeModal";
 import UpgradeToast from "../../components/UpgradeToast";
 import ShareModal from "../../components/ShareModal";
+import EmailCaptureModal from "../../components/EmailCaptureModal";
 import { createProject, getProjectById, shareProject, incrementProjectView, getPublicProject } from "../../lib/puter.action";
 import { ReactCompareSlider, ReactCompareSliderImage } from "react-compare-slider";
 import type { DesignStyle, DesignItem } from "../../lib/types";
@@ -68,6 +69,10 @@ const VisualizerId = () => {
     const [shareUrl, setShareUrl] = useState<string | null>(null);
     const [isPublicView, setIsPublicView] = useState(false);
     const [ownerName, setOwnerName] = useState<string | null>(null);
+
+    // Email capture states
+    const [showEmailCapture, setShowEmailCapture] = useState(false);
+    const [pendingGeneration, setPendingGeneration] = useState<{ style: DesignStyle; preset: PresetCategory } | null>(null);
 
     const handleBack = () => navigate('/');
 
@@ -363,6 +368,15 @@ const VisualizerId = () => {
     const runGeneration = async (item: DesignItem, style: DesignStyle = selectedStyle, preset: PresetCategory = selectedPreset) => {
         if(!id || !item.sourceImage) return;
 
+        // Check for email capture - if no email and not signed in, show capture modal
+        const hasEmail = localStorage.getItem('roomify_captured_email');
+        
+        if (!hasEmail && !userId) {
+            setPendingGeneration({ style, preset });
+            setShowEmailCapture(true);
+            return;
+        }
+
         if (userId) {
             const limitCheck = await checkRenderLimit(userId);
             
@@ -457,6 +471,17 @@ const VisualizerId = () => {
         }
     };
 
+    const handleEmailCaptureSuccess = (email: string) => {
+        console.log('Email captured:', email);
+        setShowEmailCapture(false);
+        
+        // Retry generation if pending
+        if (pendingGeneration && project) {
+            runGeneration(project, pendingGeneration.style, pendingGeneration.preset);
+            setPendingGeneration(null);
+        }
+    };
+
     useEffect(() => {
         let isMounted = true;
 
@@ -545,7 +570,7 @@ const VisualizerId = () => {
                 setShareUrl(result.shareUrl);
             }
             
-            // Create updated project with proper typing - spread the entire project and override only changed fields
+            // Create updated project with proper typing
             const updatedProject: DesignItem = {
                 ...project,
                 isPublic: newPublicState,
@@ -842,6 +867,16 @@ const VisualizerId = () => {
                 isPublic={isPublic}
                 shareUrl={shareUrl}
                 onTogglePublic={handleShareToggle}
+            />
+
+            <EmailCaptureModal 
+                isOpen={showEmailCapture}
+                onClose={() => {
+                    setShowEmailCapture(false);
+                    setPendingGeneration(null);
+                }}
+                onSuccess={handleEmailCaptureSuccess}
+                triggerReason="create_project"
             />
 
             {showUpgradeToast && (

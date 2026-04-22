@@ -15,6 +15,7 @@ import {
     User
 } from 'lucide-react';
 import Button from './ui/Button';
+import EmailCaptureModal from './EmailCaptureModal';
 import { getProjects, deleteProject, renameProject, toggleFavorite, getFavorites } from '../lib/puter.action';
 import UpgradeModal from './UpgradeModal';
 import type { DesignItem } from '../lib/types';
@@ -35,8 +36,10 @@ const ProjectDashboard = ({ userId, isPremium }: ProjectDashboardProps) => {
     const [editName, setEditName] = useState('');
     const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+    const [showEmailCapture, setShowEmailCapture] = useState(false);
     const [favorites, setFavorites] = useState<string[]>([]);
     const [sortBy, setSortBy] = useState<'date' | 'name'>('date');
+    const [pendingAction, setPendingAction] = useState<{ type: string; data?: any } | null>(null);
 
     const loadProjects = async () => {
         setLoading(true);
@@ -88,6 +91,15 @@ const ProjectDashboard = ({ userId, isPremium }: ProjectDashboardProps) => {
 
     const handleRename = async (id: string, newName: string) => {
         if (!newName.trim()) return;
+        
+        const hasEmail = localStorage.getItem('roomify_captured_email');
+        
+        if (!hasEmail) {
+            setPendingAction({ type: 'rename', data: { id, newName } });
+            setShowEmailCapture(true);
+            return;
+        }
+        
         const success = await renameProject(id, newName);
         if (success) {
             await loadProjects();
@@ -97,6 +109,14 @@ const ProjectDashboard = ({ userId, isPremium }: ProjectDashboardProps) => {
     };
 
     const handleDelete = async (id: string) => {
+        const hasEmail = localStorage.getItem('roomify_captured_email');
+        
+        if (!hasEmail) {
+            setPendingAction({ type: 'delete', data: { id } });
+            setShowEmailCapture(true);
+            return;
+        }
+        
         const success = await deleteProject(id);
         if (success) {
             await loadProjects();
@@ -119,11 +139,25 @@ const ProjectDashboard = ({ userId, isPremium }: ProjectDashboardProps) => {
         }
     };
 
+    const handleEmailCaptureSuccess = (email: string) => {
+        console.log('Email captured:', email);
+        setShowEmailCapture(false);
+        
+        // Retry pending action
+        if (pendingAction) {
+            if (pendingAction.type === 'rename') {
+                handleRename(pendingAction.data.id, pendingAction.data.newName);
+            } else if (pendingAction.type === 'delete') {
+                handleDelete(pendingAction.data.id);
+            }
+            setPendingAction(null);
+        }
+    };
+
     const formatDate = (timestamp: number) => {
         const date = new Date(timestamp);
         const now = new Date();
         const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-        
         if (diffDays === 0) return 'Today';
         if (diffDays === 1) return 'Yesterday';
         if (diffDays < 7) return `${diffDays} days ago`;
@@ -342,6 +376,16 @@ const ProjectDashboard = ({ userId, isPremium }: ProjectDashboardProps) => {
                 isOpen={showUpgradeModal}
                 onClose={() => setShowUpgradeModal(false)}
                 featureName="advanced features"
+            />
+
+            <EmailCaptureModal 
+                isOpen={showEmailCapture}
+                onClose={() => {
+                    setShowEmailCapture(false);
+                    setPendingAction(null);
+                }}
+                onSuccess={handleEmailCaptureSuccess}
+                triggerReason="save_project"
             />
 
             <style>{`
