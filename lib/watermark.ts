@@ -40,12 +40,12 @@ export const addWatermark = async (
                     canvas.height - 35
                 );
                 
-                // Add upgrade CTA in smaller font
+                // Add upgrade CTA in smaller font with correct pricing
                 const ctaFontSize = Math.max(10, canvas.width / 55);
                 ctx.font = `${ctaFontSize}px "Inter", system-ui, -apple-system, sans-serif`;
                 ctx.fillStyle = 'rgba(249, 115, 22, 0.95)';
                 ctx.fillText(
-                    'Upgrade to Pro - $15/mo • No Watermark', 
+                    'Upgrade to Pro - $19/mo • No Watermark', 
                     canvas.width / 2, 
                     canvas.height - 15
                 );
@@ -82,7 +82,6 @@ export const addWatermark = async (
 };
 
 // Alternative: Simpler watermark that doesn't require canvas manipulation
-// This creates a new canvas with the watermark without CORS issues
 export const addSimpleWatermark = async (
     imageDataUrl: string,
     isPremium: boolean
@@ -95,7 +94,7 @@ export const addSimpleWatermark = async (
     }
     
     // For external URLs that might have CORS issues,
-    // we'll use a proxy approach or return as-is with a note
+    // we'll return as-is with a note in console
     console.warn('Cannot add watermark to external URL due to CORS, returning original');
     return imageDataUrl;
 };

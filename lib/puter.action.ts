@@ -145,3 +145,101 @@ export const getProjectById = async ({ id }: { id: string }) => {
         return null;
     }
 };
+
+// PROJECT DASHBOARD FUNCTIONS
+
+export const renameProject = async (id: string, newName: string): Promise<boolean> => {
+    if (!PUTER_WORKER_URL) {
+        console.warn('Missing VITE_PUTER_WORKER_URL');
+        return false;
+    }
+
+    try {
+        const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/projects/rename`, {
+            method: 'POST',
+            body: JSON.stringify({ id, name: newName })
+        });
+
+        if (!response.ok) {
+            console.error('Failed to rename project', await response.text());
+            return false;
+        }
+
+        return true;
+    } catch (e) {
+        console.error('Failed to rename project:', e);
+        return false;
+    }
+};
+
+export const deleteProject = async (id: string): Promise<boolean> => {
+    if (!PUTER_WORKER_URL) {
+        console.warn('Missing VITE_PUTER_WORKER_URL');
+        return false;
+    }
+
+    try {
+        const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/projects/delete`, {
+            method: 'POST',  // Changed from DELETE to POST to avoid CORS issues
+            body: JSON.stringify({ id })
+        });
+
+        if (!response.ok) {
+            console.error('Failed to delete project', await response.text());
+            return false;
+        }
+
+        return true;
+    } catch (e) {
+        console.error('Failed to delete project:', e);
+        return false;
+    }
+};
+
+export const toggleFavorite = async (id: string, isFavorite: boolean): Promise<boolean> => {
+    if (!PUTER_WORKER_URL) {
+        console.warn('Missing VITE_PUTER_WORKER_URL');
+        return false;
+    }
+
+    try {
+        const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/projects/favorite`, {
+            method: 'POST',
+            body: JSON.stringify({ id, favorite: isFavorite })
+        });
+
+        if (!response.ok) {
+            console.error('Failed to toggle favorite', await response.text());
+            return false;
+        }
+
+        return true;
+    } catch (e) {
+        console.error('Failed to toggle favorite:', e);
+        return false;
+    }
+};
+
+export const getFavorites = async (): Promise<string[]> => {
+    if (!PUTER_WORKER_URL) {
+        console.warn('Missing VITE_PUTER_WORKER_URL');
+        return [];
+    }
+
+    try {
+        const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/projects/favorites`, {
+            method: 'GET'
+        });
+
+        if (!response.ok) {
+            console.error('Failed to get favorites', await response.text());
+            return [];
+        }
+
+        const data = await response.json();
+        return data.favorites || [];
+    } catch (e) {
+        console.error('Failed to get favorites:', e);
+        return [];
+    }
+};

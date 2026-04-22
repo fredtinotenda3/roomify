@@ -551,7 +551,7 @@ const VisualizerId = () => {
                                 )}
                                 {hasWatermark && (
                                     <span className="watermark-badge">
-                                        Watermark • Upgrade to remove
+                                 Watermark • Upgrade to Pro - $19/mo
                                     </span>
                                 )}
                             </p>
