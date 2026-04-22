@@ -1,7 +1,10 @@
+// FILE: C:\Users\user\Desktop\roomify\lib\puter.action.ts
+
 import puter from "@heyputer/puter.js";
-import {getOrCreateHostingConfig, uploadImageToHosting} from "./puter.hosting";
-import {isHostedUrl} from "./utils";
-import {PUTER_WORKER_URL} from "./constants";
+import { getOrCreateHostingConfig, uploadImageToHosting } from "./puter.hosting";
+import { isHostedUrl } from "./utils";
+import { PUTER_WORKER_URL } from "./constants";
+import type { DesignItem, CreateProjectParams } from "./types";
 
 export const signIn = async () => await puter.auth.signIn();
 
@@ -57,6 +60,10 @@ export const createProject = async ({ item, visibility = "private" }: CreateProj
         ...rest,
         sourceImage: resolvedSource,
         renderedImage: resolvedRender,
+        style: item.style,
+        preset: item.preset,
+        renderedStyles: item.renderedStyles,
+        renderedPresets: item.renderedPresets,
     }
 
     try {

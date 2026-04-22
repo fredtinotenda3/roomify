@@ -3,10 +3,16 @@
 import { useNavigate, useOutletContext, useParams} from "react-router";
 import {useEffect, useRef, useState} from "react";
 import {generate3DView} from "../../lib/ai.action";
-import {AlertCircle, Box, Download, RefreshCcw, Share2, X} from "lucide-react";
+import {AlertCircle, Box, Download, FileText, RefreshCcw, Share2, X} from "lucide-react";
 import Button from "../../components/ui/Button";
+import StyleSelector from "../../components/StyleSelector";
+import PresetSelector from "../../components/PresetSelector";
 import {createProject, getProjectById} from "../../lib/puter.action";
 import {ReactCompareSlider, ReactCompareSliderImage} from "react-compare-slider";
+import type { DesignStyle } from "../../lib/types";
+import type { PresetCategory } from "../../lib/presets";
+import { STYLE_OPTIONS } from "../../lib/constants";
+import { exportToPDF } from "../../lib/pdf.export";
 
 const VisualizerId = () => {
     const { id } = useParams();
@@ -22,6 +28,10 @@ const VisualizerId = () => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [generationError, setGenerationError] = useState<string | null>(null);
     const [currentImage, setCurrentImage] = useState<string | null>(null);
+    const [selectedStyle, setSelectedStyle] = useState<DesignStyle>('modern');
+    const [selectedPreset, setSelectedPreset] = useState<PresetCategory>('budget');
+    const [isGeneratingNewStyle, setIsGeneratingNewStyle] = useState(false);
+    const [generationProgress, setGenerationProgress] = useState(0);
 
     const handleBack = () => navigate('/');
     
@@ -30,39 +40,226 @@ const VisualizerId = () => {
 
         const link = document.createElement('a');
         link.href = currentImage;
-        link.download = `roomify-${id || 'design'}.png`;
+        link.download = `roomify-${id || 'design'}-${selectedStyle}-${selectedPreset}.png`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
     }
     
+    const handlePDFExport = async () => {
+        if (!project?.sourceImage || !currentImage) {
+            alert('Both original and rendered images are required for PDF export');
+            return;
+        }
+        
+        try {
+            const styleName = STYLE_OPTIONS.find(s => s.id === selectedStyle)?.name || selectedStyle;
+            const presetName = getPresetName(selectedPreset);
+            const date = new Date().toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+            
+            await exportToPDF({
+                title: project?.name || `Residence ${id}`,
+                beforeImage: project.sourceImage,
+                afterImage: currentImage,
+                styleName: `${styleName} - ${presetName}`,
+                date: date,
+                projectId: id || 'unknown'
+            });
+        } catch (error) {
+            console.error('PDF export failed:', error);
+            alert('Failed to generate PDF. Please make sure images are loaded and try again.');
+        }
+    };
+    
+    const getPresetName = (presetId: PresetCategory): string => {
+        const presetNames: Record<PresetCategory, string> = {
+            luxury: 'Luxury Estate',
+            budget: 'Budget Friendly',
+            minimalist: 'Minimalist Zen',
+            eclectic: 'Eclectic Boho',
+            traditional: 'Classic Traditional'
+        };
+        return presetNames[presetId] || presetId;
+    };
+    
     const handleRetryGeneration = async () => {
         if (!project) return;
         generationAttempts.current = 0;
         setGenerationError(null);
-        await runGeneration(project);
+        await runGeneration(project, selectedStyle, selectedPreset);
     }
 
-    const runGeneration = async (item: DesignItem) => {
+    const handleStyleChange = async (style: DesignStyle) => {
+        if (!project || !project.sourceImage) return;
+        
+        setSelectedStyle(style);
+        
+        // Check if we already have this style + preset combination rendered
+        const cacheKey = `${style}-${selectedPreset}`;
+        if (project.renderedPresets && project.renderedPresets[cacheKey]) {
+            setCurrentImage(project.renderedPresets[cacheKey]);
+            return;
+        }
+        
+        // Generate new style with current preset
+        setIsGeneratingNewStyle(true);
+        setGenerationError(null);
+        setGenerationProgress(0);
+        
+        const progressInterval = setInterval(() => {
+            setGenerationProgress(prev => {
+                if (prev >= 90) return prev;
+                return prev + 10;
+            });
+        }, 500);
+        
+        try {
+            const result = await generate3DView({ 
+                sourceImage: project.sourceImage, 
+                style: style,
+                preset: selectedPreset
+            });
+            
+            if (result.renderedImage) {
+                setCurrentImage(result.renderedImage);
+                setGenerationProgress(100);
+                
+                // Update project with new style
+                const updatedItem = {
+                    ...project,
+                    renderedStyles: {
+                        ...(project.renderedStyles || {}),
+                        [style]: result.renderedImage
+                    },
+                    renderedPresets: {
+                        ...(project.renderedPresets || {}),
+                        [`${style}-${selectedPreset}`]: result.renderedImage
+                    },
+                    renderedImage: result.renderedImage,
+                    style: style,
+                    preset: selectedPreset,
+                    timestamp: Date.now(),
+                };
+                
+                const saved = await createProject({ item: updatedItem, visibility: "private" });
+                if (saved) {
+                    setProject(saved);
+                }
+            }
+        } catch (error) {
+            console.error('Style generation failed:', error);
+            setGenerationError(error instanceof Error ? error.message : 'Failed to generate this style');
+        } finally {
+            clearInterval(progressInterval);
+            setIsGeneratingNewStyle(false);
+            setTimeout(() => setGenerationProgress(0), 1000);
+        }
+    };
+
+    const handlePresetChange = async (preset: PresetCategory) => {
+        if (!project || !project.sourceImage) return;
+        
+        setSelectedPreset(preset);
+        
+        // Check if we already have this preset + style combination rendered
+        const cacheKey = `${selectedStyle}-${preset}`;
+        if (project.renderedPresets && project.renderedPresets[cacheKey]) {
+            setCurrentImage(project.renderedPresets[cacheKey]);
+            return;
+        }
+        
+        // Generate new preset with current style
+        setIsGeneratingNewStyle(true);
+        setGenerationError(null);
+        setGenerationProgress(0);
+        
+        const progressInterval = setInterval(() => {
+            setGenerationProgress(prev => {
+                if (prev >= 90) return prev;
+                return prev + 10;
+            });
+        }, 500);
+        
+        try {
+            const result = await generate3DView({ 
+                sourceImage: project.sourceImage, 
+                style: selectedStyle,
+                preset: preset
+            });
+            
+            if (result.renderedImage) {
+                setCurrentImage(result.renderedImage);
+                setGenerationProgress(100);
+                
+                // Update project with new preset
+                const updatedItem = {
+                    ...project,
+                    renderedPresets: {
+                        ...(project.renderedPresets || {}),
+                        [`${selectedStyle}-${preset}`]: result.renderedImage
+                    },
+                    renderedImage: result.renderedImage,
+                    preset: preset,
+                    timestamp: Date.now(),
+                };
+                
+                const saved = await createProject({ item: updatedItem, visibility: "private" });
+                if (saved) {
+                    setProject(saved);
+                }
+            }
+        } catch (error) {
+            console.error('Preset generation failed:', error);
+            setGenerationError(error instanceof Error ? error.message : 'Failed to generate with this preset');
+        } finally {
+            clearInterval(progressInterval);
+            setIsGeneratingNewStyle(false);
+            setTimeout(() => setGenerationProgress(0), 1000);
+        }
+    };
+
+    const runGeneration = async (item: DesignItem, style: DesignStyle = selectedStyle, preset: PresetCategory = selectedPreset) => {
         if(!id || !item.sourceImage) return;
 
         try {
             setIsProcessing(true);
             setGenerationError(null);
+            setGenerationProgress(0);
             
-            console.log(`Starting generation for project: ${id} (Attempt ${generationAttempts.current + 1})`);
+            const progressInterval = setInterval(() => {
+                setGenerationProgress(prev => {
+                    if (prev >= 90) return prev;
+                    return prev + 10;
+                });
+            }, 500);
             
-            const result = await generate3DView({ sourceImage: item.sourceImage });
+            console.log(`Starting generation for project: ${id} with ${style} style and ${preset} preset (Attempt ${generationAttempts.current + 1})`);
+            
+            const result = await generate3DView({ sourceImage: item.sourceImage, style, preset });
 
             if(result.renderedImage) {
                 console.log('Generation successful, saving result...');
                 setCurrentImage(result.renderedImage);
-                generationAttempts.current = 0; // Reset attempts on success
+                setGenerationProgress(100);
 
                 const updatedItem = {
                     ...item,
                     renderedImage: result.renderedImage,
                     renderedPath: result.renderedPath,
+                    style: style,
+                    preset: preset,
+                    renderedStyles: {
+                        ...(item.renderedStyles || {}),
+                        [style]: result.renderedImage
+                    },
+                    renderedPresets: {
+                        ...(item.renderedPresets || {}),
+                        [`${style}-${preset}`]: result.renderedImage
+                    },
                     timestamp: Date.now(),
                     ownerId: item.ownerId ?? userId ?? null,
                     isPublic: item.isPublic ?? false,
@@ -77,17 +274,16 @@ const VisualizerId = () => {
             } else {
                 throw new Error('No rendered image in response');
             }
+            
+            clearInterval(progressInterval);
         } catch (error) {
             console.error('Generation failed: ', error);
             
-            // Auto-retry logic
             if (generationAttempts.current < MAX_RETRIES) {
                 generationAttempts.current++;
                 console.log(`Auto-retrying... (${generationAttempts.current}/${MAX_RETRIES})`);
-                
-                // Wait a bit before retrying
                 await new Promise(resolve => setTimeout(resolve, 2000));
-                await runGeneration(item);
+                await runGeneration(item, style, preset);
             } else {
                 generationAttempts.current = 0;
                 const errorMessage = error instanceof Error ? error.message : 'Failed to generate 3D view';
@@ -97,6 +293,7 @@ const VisualizerId = () => {
         } finally {
             if (generationAttempts.current === 0) {
                 setIsProcessing(false);
+                setTimeout(() => setGenerationProgress(0), 1000);
             }
         }
     }
@@ -119,7 +316,19 @@ const VisualizerId = () => {
             if (!isMounted) return;
 
             setProject(fetchedProject);
-            setCurrentImage(fetchedProject?.renderedImage || null);
+            
+            if (fetchedProject?.style) {
+                setSelectedStyle(fetchedProject.style);
+            }
+            
+            if (fetchedProject?.preset) {
+                setSelectedPreset(fetchedProject.preset);
+            }
+            
+            if (fetchedProject?.renderedImage) {
+                setCurrentImage(fetchedProject.renderedImage);
+            }
+            
             setIsProjectLoading(false);
             hasInitialGenerated.current = false;
         };
@@ -175,12 +384,15 @@ const VisualizerId = () => {
         );
     }
 
+    const isAnyProcessing = isProcessing || isGeneratingNewStyle;
+    const currentStyleName = STYLE_OPTIONS.find(s => s.id === selectedStyle)?.name || selectedStyle;
+    const currentPresetName = getPresetName(selectedPreset);
+
     return (
         <div className="visualizer">
             <nav className="topbar">
                 <div className="brand">
                     <Box className="logo" />
-
                     <span className="name">Roomify</span>
                 </div>
                 <Button variant="ghost" size="sm" onClick={handleBack} className="exit">
@@ -194,7 +406,9 @@ const VisualizerId = () => {
                         <div className="panel-meta">
                             <p>Project</p>
                             <h2>{project?.name || `Residence ${id}`}</h2>
-                            <p className="note">Created by You</p>
+                            <p className="note">
+                                Created by You • Style: {currentStyleName} • Preset: {currentPresetName}
+                            </p>
                         </div>
 
                         <div className="panel-actions">
@@ -202,19 +416,26 @@ const VisualizerId = () => {
                                 size="sm"
                                 onClick={handleExport}
                                 className="export"
-                                disabled={!currentImage || isProcessing}
+                                disabled={!currentImage || isAnyProcessing}
                             >
-                                <Download className="w-4 h-4 mr-2" /> Export
+                                <Download className="w-4 h-4 mr-2" /> PNG
+                            </Button>
+                            <Button
+                                size="sm"
+                                onClick={handlePDFExport}
+                                variant="secondary"
+                                disabled={!currentImage || !project?.sourceImage || isAnyProcessing}
+                            >
+                                <FileText className="w-4 h-4 mr-2" /> PDF
                             </Button>
                             <Button 
                                 size="sm" 
                                 onClick={() => {
-                                    // Share functionality can be implemented here
                                     navigator.clipboard?.writeText(window.location.href);
                                     alert('Link copied to clipboard!');
                                 }} 
                                 className="share" 
-                                disabled={isProcessing}
+                                disabled={isAnyProcessing}
                             >
                                 <Share2 className="w-4 h-4 mr-2" />
                                 Share
@@ -222,9 +443,27 @@ const VisualizerId = () => {
                         </div>
                     </div>
 
-                    <div className={`render-area ${isProcessing ? 'is-processing': ''}`}>
+                    {/* Style Selector Section */}
+                    <div className="style-section">
+                        <StyleSelector 
+                            selectedStyle={selectedStyle}
+                            onStyleChange={handleStyleChange}
+                            isGenerating={isAnyProcessing}
+                        />
+                    </div>
+
+                    {/* Preset Selector Section */}
+                    <div className="preset-section">
+                        <PresetSelector 
+                            selectedPreset={selectedPreset}
+                            onPresetChange={handlePresetChange}
+                            isGenerating={isAnyProcessing}
+                        />
+                    </div>
+
+                    <div className={`render-area ${isAnyProcessing ? 'is-processing': ''}`}>
                         {currentImage ? (
-                            <img src={currentImage} alt="AI Render" className="render-img" />
+                            <img src={currentImage} alt={`AI Render - ${currentStyleName} - ${currentPresetName}`} className="render-img" />
                         ) : generationError ? (
                             <div className="render-placeholder flex flex-col items-center justify-center min-h-100">
                                 <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
@@ -240,22 +479,40 @@ const VisualizerId = () => {
                                     <img src={project?.sourceImage} alt="Original" className="render-fallback" />
                                 )}
                                 <div className="absolute inset-0 flex items-center justify-center bg-black/5">
-                                    <p className="text-zinc-500">Ready to generate</p>
+                                    <p className="text-zinc-500">Select a style and preset, then generate</p>
                                 </div>
                             </div>
                         )}
 
-                        {isProcessing && (
+                        {isAnyProcessing && (
                             <div className="render-overlay">
                                 <div className="rendering-card">
                                     <RefreshCcw className="spinner" />
-                                    <span className="title">Rendering...</span>
-                                    <span className="subtitle">Generating your 3D visualization</span>
+                                    <span className="title">
+                                        {isGeneratingNewStyle 
+                                            ? `Generating ${currentStyleName} with ${currentPresetName}...` 
+                                            : 'Rendering...'}
+                                    </span>
+                                    <span className="subtitle">
+                                        {isGeneratingNewStyle 
+                                            ? `Creating ${currentStyleName} style with ${currentPresetName} furnishings` 
+                                            : 'Generating your 3D visualization'}
+                                    </span>
+                                    {generationProgress > 0 && (
+                                        <div className="generation-progress">
+                                            <div className="progress-bar">
+                                                <div 
+                                                    className="progress-fill" 
+                                                    style={{ width: `${generationProgress}%` }}
+                                                />
+                                            </div>
+                                            <p className="progress-text">{generationProgress}% complete</p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
                     </div>
-
                 </div>
 
                 <div className="panel compare">
@@ -263,6 +520,7 @@ const VisualizerId = () => {
                         <div className="panel-meta">
                             <p>Comparison</p>
                             <h3>Before and After</h3>
+                            <p className="note">Original floor plan vs {currentStyleName} - {currentPresetName}</p>
                         </div>
                         <div className="hint">Drag to compare</div>
                     </div>
@@ -289,9 +547,9 @@ const VisualizerId = () => {
                                         <p className="text-zinc-500">Generation failed - cannot compare</p>
                                     </div>
                                 )}
-                                {!generationError && !currentImage && (
+                                {!generationError && !currentImage && !isAnyProcessing && (
                                     <div className="absolute inset-0 flex items-center justify-center bg-black/5">
-                                        <p className="text-zinc-500">AI render will appear here</p>
+                                        <p className="text-zinc-500">Select a style and preset above to generate</p>
                                     </div>
                                 )}
                             </div>
@@ -299,6 +557,53 @@ const VisualizerId = () => {
                     </div>
                 </div>
             </section>
+
+            <style>{`
+                .style-section {
+                    padding: 1rem 1.5rem;
+                    border-bottom: 1px solid #f3f4f6;
+                    background: #fafafa;
+                }
+                
+                .preset-section {
+                    padding: 1rem 1.5rem;
+                    border-bottom: 1px solid #f3f4f6;
+                    background: linear-gradient(135deg, #fafafa 0%, #ffffff 100%);
+                }
+                
+                .generation-progress {
+                    width: 100%;
+                    max-width: 300px;
+                    margin-top: 1rem;
+                }
+                
+                .progress-bar {
+                    width: 100%;
+                    height: 4px;
+                    background: #e5e7eb;
+                    border-radius: 2px;
+                    overflow: hidden;
+                }
+                
+                .progress-fill {
+                    height: 100%;
+                    background: #f97316;
+                    transition: width 0.3s ease;
+                }
+                
+                .progress-text {
+                    font-size: 0.7rem;
+                    color: #6b7280;
+                    margin-top: 0.5rem;
+                    text-align: center;
+                }
+                
+                @media (max-width: 640px) {
+                    .style-section, .preset-section {
+                        padding: 0.75rem 1rem;
+                    }
+                }
+            `}</style>
         </div>
     )
 }

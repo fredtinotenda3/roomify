@@ -597,3 +597,266 @@
         }
     }
 }
+
+
+
+@layer components {
+    /* Style Selector Component Styles */
+    .style-selector {
+        @apply w-full mb-6;
+    }
+
+    .style-selector-header {
+        @apply mb-4 text-center;
+    }
+
+    .header-content {
+        @apply flex flex-col items-center gap-2;
+    }
+
+    .sparkle-icon {
+        @apply w-6 h-6 text-primary;
+    }
+
+    .style-selector-header h3 {
+        @apply text-lg font-semibold text-foreground m-0;
+    }
+
+    .style-hint {
+        @apply text-xs text-zinc-500 m-0;
+    }
+
+    .style-grid {
+        @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3;
+    }
+
+    .style-card {
+        @apply relative flex items-center gap-3 p-3 bg-white border-2 border-zinc-200 rounded-xl cursor-pointer transition-all duration-200 text-left w-full;
+    }
+
+    .style-card:hover:not(.disabled) {
+        @apply border-primary bg-orange-50 transform -translate-y-0.5 shadow-md;
+    }
+
+    .style-card.selected {
+        @apply border-primary bg-orange-50 shadow-lg ring-2 ring-primary/20;
+    }
+
+    .style-card.disabled {
+        @apply opacity-50 cursor-not-allowed;
+    }
+
+    .style-icon {
+        @apply flex-shrink-0 w-10 h-10 flex items-center justify-center bg-zinc-100 rounded-lg transition-all duration-200;
+    }
+
+    .style-card:hover:not(.disabled) .style-icon {
+        @apply bg-primary scale-105;
+    }
+
+    .style-emoji {
+        @apply text-2xl;
+    }
+
+    .style-info {
+        @apply flex-1;
+    }
+
+    .style-info h4 {
+        @apply text-sm font-semibold text-foreground m-0 mb-1;
+    }
+
+    .style-description {
+        @apply text-xs text-zinc-500 m-0 leading-tight;
+    }
+
+    .selected-badge {
+        @apply absolute -top-2 -right-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center text-white border-2 border-white;
+    }
+
+    .hover-overlay {
+        @apply absolute inset-0 bg-primary/90 rounded-xl flex items-center justify-center text-white text-xs font-semibold backdrop-blur-sm;
+    }
+
+    /* Style section in visualizer */
+    .style-section {
+        @apply px-6 py-4 border-b border-zinc-100 bg-zinc-50/50;
+    }
+
+    /* Responsive adjustments for style selector */
+    @media (max-width: 1024px) {
+        .style-grid {
+            @apply grid-cols-1 sm:grid-cols-2 gap-3;
+        }
+        
+        .style-card {
+            @apply p-2.5;
+        }
+        
+        .style-icon {
+            @apply w-8 h-8;
+        }
+        
+        .style-emoji {
+            @apply text-xl;
+        }
+        
+        .style-info h4 {
+            @apply text-xs;
+        }
+        
+        .style-description {
+            @apply text-[11px];
+        }
+    }
+
+    @media (max-width: 640px) {
+        .style-section {
+            @apply px-4 py-3;
+        }
+        
+        .style-grid {
+            @apply grid-cols-1;
+        }
+    }
+
+    /* Loading states for style generation */
+    .render-area.is-processing {
+        @apply relative;
+    }
+
+    .render-area.is-processing .render-img {
+        @apply opacity-50 blur-sm scale-105 transition-all duration-300;
+    }
+
+    .render-overlay {
+        @apply absolute inset-0 flex flex-col items-center justify-center z-30 bg-white/80 backdrop-blur-md transition-all duration-300;
+    }
+
+    .rendering-card {
+        @apply bg-white px-6 py-4 rounded-xl border border-zinc-200 flex flex-col items-center shadow-xl;
+    }
+
+    .rendering-card .spinner {
+        @apply w-8 h-8 mb-3 animate-spin text-primary;
+    }
+
+    .rendering-card .title {
+        @apply text-sm font-bold text-foreground;
+    }
+
+    .rendering-card .subtitle {
+        @apply text-xs text-zinc-500 mt-1;
+    }
+
+    /* Panel header enhancements for style info */
+    .panel-meta .note {
+        @apply text-xs text-zinc-500 mt-1 flex items-center gap-1;
+    }
+
+    /* Style badge in project cards */
+    .project-card .style-badge {
+        @apply absolute bottom-3 right-3 bg-white/90 backdrop-blur-md px-2 py-1 rounded-md border border-zinc-200 shadow-sm text-[10px] font-medium text-zinc-700;
+    }
+
+    /* Animation for style switching */
+    .render-img {
+        @apply transition-all duration-500 ease-in-out;
+    }
+
+    /* Style selector loading skeleton */
+    .style-skeleton {
+        @apply animate-pulse;
+    }
+
+    .style-skeleton .style-card {
+        @apply bg-zinc-100 border-zinc-200;
+    }
+
+    /* Tooltip for style info */
+    .style-tooltip {
+        @apply invisible absolute z-50 bg-foreground text-background text-xs rounded-lg px-2 py-1 whitespace-nowrap -top-8 left-1/2 transform -translate-x-1/2 transition-all duration-200;
+    }
+
+    .style-card:hover .style-tooltip {
+        @apply visible;
+    }
+
+    /* Generation progress indicator */
+    .generation-progress {
+        @apply w-full max-w-md mt-4;
+    }
+
+    .progress-bar {
+        @apply w-full h-1.5 bg-zinc-200 rounded-full overflow-hidden;
+    }
+
+    .progress-fill {
+        @apply h-full bg-primary transition-all duration-300 ease-out;
+    }
+
+    /* Style variation buttons */
+    .style-variations {
+        @apply flex flex-wrap gap-2 mt-4;
+    }
+
+    .style-variation-btn {
+        @apply px-3 py-1.5 text-xs rounded-lg border border-zinc-200 bg-white text-zinc-700 transition-all duration-200 hover:border-primary hover:text-primary hover:bg-orange-50;
+    }
+
+    .style-variation-btn.active {
+        @apply border-primary bg-primary text-white hover:bg-primary/90;
+    }
+
+    /* Success state for style generation */
+    .style-success {
+        @apply absolute inset-0 flex items-center justify-center bg-green-500/10 backdrop-blur-sm rounded-xl transition-all duration-300;
+    }
+
+    .success-check {
+        @apply w-12 h-12 text-green-500 animate-bounce;
+    }
+}
+
+/* Additional animations */
+@keyframes stylePulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.05);
+        opacity: 0.8;
+    }
+}
+
+.style-card.generating {
+    animation: stylePulse 1.5s ease-in-out infinite;
+}
+
+/* Dark mode support (if needed) */
+@media (prefers-color-scheme: dark) {
+    .style-card {
+        @apply bg-zinc-900 border-zinc-700;
+    }
+    
+    .style-card:hover:not(.disabled) {
+        @apply bg-orange-900/20;
+    }
+    
+    .style-icon {
+        @apply bg-zinc-800;
+    }
+    
+    .style-info h4 {
+        @apply text-zinc-100;
+    }
+    
+    .rendering-card {
+        @apply bg-zinc-900 border-zinc-700;
+    }
+    
+    .style-section {
+        @apply bg-zinc-900/50 border-zinc-800;
+    }
+}
