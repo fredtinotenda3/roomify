@@ -13,6 +13,7 @@ interface Material {
 }
 
 interface DesignItem {
+    shareToken: any;
     renderedPresets: any;
     renderedStyles: any;
     id: string;

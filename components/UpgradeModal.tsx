@@ -10,9 +10,10 @@ interface UpgradeModalProps {
     onClose: () => void;
     featureName?: string;
     remaining?: number;
+    triggerContext?: 'render_limit' | 'export_limit' | 'pdf_limit' | 'premium_style' | 'premium_preset' | 'watermark';
 }
 
-const UpgradeModal = ({ isOpen, onClose, featureName, remaining }: UpgradeModalProps) => {
+const UpgradeModal = ({ isOpen, onClose, featureName, remaining, triggerContext }: UpgradeModalProps) => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [billingInterval, setBillingInterval] = useState<'monthly' | 'yearly'>('monthly');
     const premiumFeatures = getPremiumFeatures();
@@ -21,6 +22,44 @@ const UpgradeModal = ({ isOpen, onClose, featureName, remaining }: UpgradeModalP
     const yearlyPrice = PRO_PRICE.yearly;
     const monthlyEquivalent = Math.round(yearlyPrice / 12);
     const yearlySavings = (monthlyPrice * 12) - yearlyPrice;
+
+    const getContextualTitle = (): string => {
+        switch(triggerContext) {
+            case 'render_limit':
+                return 'You\'ve Reached Your Render Limit';
+            case 'export_limit':
+                return 'You\'ve Reached Your Export Limit';
+            case 'pdf_limit':
+                return 'You\'ve Reached Your PDF Export Limit';
+            case 'premium_style':
+                return `${featureName || 'Premium'} Style is a Pro Feature`;
+            case 'premium_preset':
+                return `${featureName || 'Premium'} Preset is a Pro Feature`;
+            case 'watermark':
+                return 'Remove Watermark & Go Pro';
+            default:
+                return 'Upgrade to Roomify Pro';
+        }
+    };
+
+    const getContextualMessage = (): string => {
+        switch(triggerContext) {
+            case 'render_limit':
+                return `You've used all ${remaining !== undefined ? remaining : 0} free renders this month. Upgrade to Pro for unlimited renders!`;
+            case 'export_limit':
+                return `You've used all ${remaining !== undefined ? remaining : 0} free exports this month. Upgrade to Pro for unlimited exports!`;
+            case 'pdf_limit':
+                return `You've used all ${remaining !== undefined ? remaining : 0} free PDF exports this month. Upgrade to Pro for unlimited PDF exports!`;
+            case 'premium_style':
+                return `${featureName} styles are a Pro feature. Upgrade to unlock all 5 premium styles!`;
+            case 'premium_preset':
+                return `${featureName} presets are a Pro feature. Upgrade to unlock all 5 premium presets!`;
+            case 'watermark':
+                return 'Remove the watermark and get unlimited everything with Pro. Upgrade today!';
+            default:
+                return 'Get unlimited renders, no watermark, all premium styles, and more!';
+        }
+    };
 
     if (!isOpen) return null;
 
@@ -45,7 +84,8 @@ const UpgradeModal = ({ isOpen, onClose, featureName, remaining }: UpgradeModalP
                     <div className="crown-icon">
                         <Crown size={32} />
                     </div>
-                    <h2>Upgrade to Roomify Pro</h2>
+                    <h2>{getContextualTitle()}</h2>
+                    <p className="context-message">{getContextualMessage()}</p>
                     {featureName && remaining !== undefined && remaining === 0 && (
                         <p className="warning">
                             You've used all free {featureName} for this month
@@ -208,10 +248,16 @@ const UpgradeModal = ({ isOpen, onClose, featureName, remaining }: UpgradeModalP
                 }
 
                 .modal-header h2 {
-                    font-size: 1.75rem;
+                    font-size: 1.5rem;
                     font-weight: bold;
                     margin: 0 0 0.5rem 0;
                     color: #1a1a1a;
+                }
+
+                .context-message {
+                    color: #4b5563;
+                    font-size: 0.875rem;
+                    margin: 0.5rem 0;
                 }
 
                 .warning {
@@ -402,6 +448,16 @@ const UpgradeModal = ({ isOpen, onClose, featureName, remaining }: UpgradeModalP
                     font-size: 0.7rem;
                     color: #6b7280;
                     margin: 0;
+                }
+
+                @media (max-width: 640px) {
+                    .upgrade-modal {
+                        padding: 1.5rem;
+                    }
+                    
+                    .modal-header h2 {
+                        font-size: 1.25rem;
+                    }
                 }
             `}</style>
         </div>

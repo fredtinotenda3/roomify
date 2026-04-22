@@ -29,6 +29,14 @@ export interface UsageStats {
     isPremium: boolean;
     subscriptionType?: 'monthly' | 'yearly';
     subscriptionEndDate?: string;
+    upgradeTriggerShown?: {
+        renderLimit?: boolean;
+        exportLimit?: boolean;
+        pdfLimit?: boolean;
+        premiumStyle?: boolean;
+        premiumPreset?: boolean;
+        watermark?: boolean;
+    };
 }
 
 const USAGE_KEY_PREFIX = 'roomify_usage_';
@@ -56,13 +64,13 @@ export const getUsageStats = async (userId: string): Promise<UsageStats> => {
                 exportCount: 0,
                 pdfExportCount: 0,
                 lastResetDate: new Date().toISOString(),
-                isPremium: false
+                isPremium: false,
+                upgradeTriggerShown: {}
             };
             await puter.kv.set(key, newStats);
             return newStats;
         }
         
-        // Check if premium subscription has expired
         if (stats.isPremium && stats.subscriptionEndDate) {
             const endDate = new Date(stats.subscriptionEndDate);
             const now = new Date();
@@ -75,14 +83,14 @@ export const getUsageStats = async (userId: string): Promise<UsageStats> => {
                     renderCount: 0,
                     exportCount: 0,
                     pdfExportCount: 0,
-                    lastResetDate: now.toISOString()
+                    lastResetDate: now.toISOString(),
+                    upgradeTriggerShown: {}
                 };
                 await puter.kv.set(key, expiredStats);
                 return expiredStats;
             }
         }
         
-        // Monthly reset for free users
         const lastReset = new Date(stats.lastResetDate);
         const now = new Date();
         const monthsDiff = (now.getFullYear() - lastReset.getFullYear()) * 12 + (now.getMonth() - lastReset.getMonth());
@@ -94,7 +102,8 @@ export const getUsageStats = async (userId: string): Promise<UsageStats> => {
                 exportCount: 0,
                 pdfExportCount: 0,
                 lastResetDate: now.toISOString(),
-                isPremium: false
+                isPremium: false,
+                upgradeTriggerShown: {}
             };
             await puter.kv.set(key, resetStats);
             return resetStats;
@@ -108,7 +117,8 @@ export const getUsageStats = async (userId: string): Promise<UsageStats> => {
             exportCount: USAGE_LIMITS.FREE_EXPORTS,
             pdfExportCount: USAGE_LIMITS.FREE_PDF_EXPORTS,
             lastResetDate: new Date().toISOString(),
-            isPremium: false
+            isPremium: false,
+            upgradeTriggerShown: {}
         };
     }
 };
@@ -140,8 +150,7 @@ export const incrementPDFExportCount = async (userId: string): Promise<UsageStat
     return stats;
 };
 
-// HARD CHECK: Render limit - NO EXCEPTIONS
-export const checkRenderLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string }> => {
+export const checkRenderLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string; showUpgrade?: boolean }> => {
     const stats = await getUsageStats(userId);
     
     if (stats.isPremium) {
@@ -150,23 +159,36 @@ export const checkRenderLimit = async (userId: string): Promise<{ allowed: boole
     
     const remaining = USAGE_LIMITS.FREE_RENDERS - stats.renderCount;
     
+    // Show upgrade prompt when on last render or out of renders
+    const showUpgrade = remaining <= 1 || stats.renderCount >= USAGE_LIMITS.FREE_RENDERS - 1;
+    
     if (remaining <= 0) {
         return {
             allowed: false,
             remaining: 0,
-            message: `You've used all ${USAGE_LIMITS.FREE_RENDERS} free renders. Upgrade to Pro ($19/mo) for unlimited renders!`
+            message: `⚠️ You've reached your free limit of ${USAGE_LIMITS.FREE_RENDERS} renders. Upgrade to Pro for unlimited renders!`,
+            showUpgrade: true
+        };
+    }
+    
+    if (remaining === 1) {
+        return {
+            allowed: true,
+            remaining,
+            message: `⚠️ Last free render! After this, upgrade to Pro for unlimited renders.`,
+            showUpgrade: true
         };
     }
     
     return {
         allowed: true,
         remaining,
-        message: `You have ${remaining} free render${remaining !== 1 ? 's' : ''} remaining this month`
+        message: `You have ${remaining} free render${remaining !== 1 ? 's' : ''} remaining this month`,
+        showUpgrade: false
     };
 };
 
-// HARD CHECK: Export limit
-export const checkExportLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string }> => {
+export const checkExportLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string; showUpgrade?: boolean }> => {
     const stats = await getUsageStats(userId);
     
     if (stats.isPremium) {
@@ -174,24 +196,35 @@ export const checkExportLimit = async (userId: string): Promise<{ allowed: boole
     }
     
     const remaining = USAGE_LIMITS.FREE_EXPORTS - stats.exportCount;
+    const showUpgrade = remaining <= 1 || stats.exportCount >= USAGE_LIMITS.FREE_EXPORTS - 1;
     
     if (remaining <= 0) {
         return {
             allowed: false,
             remaining: 0,
-            message: `You've used all ${USAGE_LIMITS.FREE_EXPORTS} free exports. Upgrade to Pro ($19/mo) for unlimited exports!`
+            message: `⚠️ You've reached your free limit of ${USAGE_LIMITS.FREE_EXPORTS} exports. Upgrade to Pro for unlimited exports!`,
+            showUpgrade: true
+        };
+    }
+    
+    if (remaining === 1) {
+        return {
+            allowed: true,
+            remaining,
+            message: `⚠️ Last free export! After this, upgrade to Pro for unlimited exports.`,
+            showUpgrade: true
         };
     }
     
     return {
         allowed: true,
         remaining,
-        message: `You have ${remaining} free export${remaining !== 1 ? 's' : ''} remaining this month`
+        message: `You have ${remaining} free export${remaining !== 1 ? 's' : ''} remaining this month`,
+        showUpgrade: false
     };
 };
 
-// HARD CHECK: PDF Export limit
-export const checkPDFExportLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string }> => {
+export const checkPDFExportLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string; showUpgrade?: boolean }> => {
     const stats = await getUsageStats(userId);
     
     if (stats.isPremium) {
@@ -199,19 +232,31 @@ export const checkPDFExportLimit = async (userId: string): Promise<{ allowed: bo
     }
     
     const remaining = USAGE_LIMITS.FREE_PDF_EXPORTS - stats.pdfExportCount;
+    const showUpgrade = remaining <= 1 || stats.pdfExportCount >= USAGE_LIMITS.FREE_PDF_EXPORTS - 1;
     
     if (remaining <= 0) {
         return {
             allowed: false,
             remaining: 0,
-            message: `You've used all ${USAGE_LIMITS.FREE_PDF_EXPORTS} free PDF exports. Upgrade to Pro ($19/mo) for unlimited PDF exports!`
+            message: `⚠️ You've reached your free limit of ${USAGE_LIMITS.FREE_PDF_EXPORTS} PDF exports. Upgrade to Pro for unlimited PDF exports!`,
+            showUpgrade: true
+        };
+    }
+    
+    if (remaining === 1) {
+        return {
+            allowed: true,
+            remaining,
+            message: `⚠️ Last free PDF export! After this, upgrade to Pro for unlimited PDF exports.`,
+            showUpgrade: true
         };
     }
     
     return {
         allowed: true,
         remaining,
-        message: `You have ${remaining} free PDF export${remaining !== 1 ? 's' : ''} remaining this month`
+        message: `You have ${remaining} free PDF export${remaining !== 1 ? 's' : ''} remaining this month`,
+        showUpgrade: false
     };
 };
 
@@ -220,14 +265,38 @@ export const checkHighResAccess = async (userId: string): Promise<boolean> => {
     return stats.isPremium;
 };
 
-// HARD CHECK: Premium styles (returns TRUE if free, FALSE if premium/locked)
-export const checkPremiumStyle = (styleId: string): boolean => {
-    return !USAGE_LIMITS.PREMIUM_STYLES.includes(styleId as any);
+export const checkPremiumStyle = (styleId: string): { isFree: boolean; showUpgrade: boolean; message?: string } => {
+    const isPremium = USAGE_LIMITS.PREMIUM_STYLES.includes(styleId as any);
+    
+    if (isPremium) {
+        return {
+            isFree: false,
+            showUpgrade: true,
+            message: `✨ ${styleId.charAt(0).toUpperCase() + styleId.slice(1)} style is a Pro feature. Upgrade to unlock all premium styles!`
+        };
+    }
+    
+    return {
+        isFree: true,
+        showUpgrade: false
+    };
 };
 
-// HARD CHECK: Premium presets (returns TRUE if free, FALSE if premium/locked)
-export const checkPremiumPreset = (presetId: string): boolean => {
-    return !USAGE_LIMITS.PREMIUM_PRESETS.includes(presetId as any);
+export const checkPremiumPreset = (presetId: string): { isFree: boolean; showUpgrade: boolean; message?: string } => {
+    const isPremium = USAGE_LIMITS.PREMIUM_PRESETS.includes(presetId as any);
+    
+    if (isPremium) {
+        return {
+            isFree: false,
+            showUpgrade: true,
+            message: `💎 ${presetId.charAt(0).toUpperCase() + presetId.slice(1)} preset is a Pro feature. Upgrade to unlock all premium presets!`
+        };
+    }
+    
+    return {
+        isFree: true,
+        showUpgrade: false
+    };
 };
 
 export const getPremiumFeatures = (): string[] => {

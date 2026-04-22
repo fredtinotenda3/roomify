@@ -8,10 +8,11 @@ import Button from "../../components/ui/Button";
 import StyleSelector from "../../components/StyleSelector";
 import PresetSelector from "../../components/PresetSelector";
 import UpgradeModal from "../../components/UpgradeModal";
+import UpgradeToast from "../../components/UpgradeToast";
 import ShareModal from "../../components/ShareModal";
 import { createProject, getProjectById, shareProject, incrementProjectView, getPublicProject } from "../../lib/puter.action";
 import { ReactCompareSlider, ReactCompareSliderImage } from "react-compare-slider";
-import type { DesignStyle } from "../../lib/types";
+import type { DesignStyle, DesignItem } from "../../lib/types";
 import type { PresetCategory } from "../../lib/presets";
 import { STYLE_OPTIONS } from "../../lib/constants";
 import { exportToPDF } from "../../lib/pdf.export";
@@ -20,14 +21,12 @@ import {
     checkRenderLimit, 
     checkExportLimit, 
     checkPDFExportLimit,
-    checkHighResAccess,
     checkPremiumStyle,
     checkPremiumPreset,
     incrementRenderCount,
     incrementExportCount,
     incrementPDFExportCount,
-    getRemainingUsage,
-    USAGE_LIMITS
+    getRemainingUsage
 } from "../../lib/usage.tracker";
 
 const VisualizerId = () => {
@@ -51,12 +50,17 @@ const VisualizerId = () => {
     const [generationProgress, setGenerationProgress] = useState(0);
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
     const [upgradeFeature, setUpgradeFeature] = useState<string>('');
+    const [upgradeTriggerContext, setUpgradeTriggerContext] = useState<'render_limit' | 'export_limit' | 'pdf_limit' | 'premium_style' | 'premium_preset' | 'watermark'>();
     const [usageInfo, setUsageInfo] = useState<{
         rendersRemaining: number;
         exportsRemaining: number;
         pdfExportsRemaining: number;
         isPremium: boolean;
     } | null>(null);
+    
+    // Toast states
+    const [showUpgradeToast, setShowUpgradeToast] = useState(false);
+    const [toastMessage, setToastMessage] = useState('');
     
     // Share states
     const [showShareModal, setShowShareModal] = useState(false);
@@ -67,7 +71,15 @@ const VisualizerId = () => {
 
     const handleBack = () => navigate('/');
 
-    // Load usage info
+    const showUpgradeTrigger = (message: string, context?: typeof upgradeTriggerContext, feature?: string) => {
+        setToastMessage(message);
+        setShowUpgradeToast(true);
+        if (context) {
+            setUpgradeTriggerContext(context);
+            setUpgradeFeature(feature || '');
+        }
+    };
+
     const loadUsageInfo = async () => {
         if (userId) {
             const usage = await getRemainingUsage(userId);
@@ -79,7 +91,6 @@ const VisualizerId = () => {
         loadUsageInfo();
     }, [userId]);
 
-    // Handle shared/public view
     useEffect(() => {
         const shareToken = searchParams.get('share');
         
@@ -94,7 +105,6 @@ const VisualizerId = () => {
                     setSelectedPreset(publicProject.preset || 'budget');
                     setOwnerName(publicProject.sharedBy || 'Anonymous');
                     setIsProjectLoading(false);
-                    // Increment view count
                     await incrementProjectView(id);
                 } else {
                     setGenerationError('Project not found or share link invalid');
@@ -108,11 +118,16 @@ const VisualizerId = () => {
     const handleExport = async () => {
         if (!currentImage) return;
 
-        // Check export limit
         if (userId) {
             const limitCheck = await checkExportLimit(userId);
+            
+            if (limitCheck.showUpgrade) {
+                showUpgradeTrigger(limitCheck.message || '⚠️ You\'re about to hit your export limit. Upgrade to Pro for unlimited exports!', 'export_limit');
+            }
+            
             if (!limitCheck.allowed) {
                 setUpgradeFeature('exports');
+                setUpgradeTriggerContext('export_limit');
                 setShowUpgradeModal(true);
                 return;
             }
@@ -139,8 +154,14 @@ const VisualizerId = () => {
         
         if (userId) {
             const limitCheck = await checkPDFExportLimit(userId);
+            
+            if (limitCheck.showUpgrade) {
+                showUpgradeTrigger(limitCheck.message || '⚠️ You\'re about to hit your PDF export limit. Upgrade to Pro for unlimited PDF exports!', 'pdf_limit');
+            }
+            
             if (!limitCheck.allowed) {
                 setUpgradeFeature('PDF exports');
+                setUpgradeTriggerContext('pdf_limit');
                 setShowUpgradeModal(true);
                 return;
             }
@@ -195,9 +216,12 @@ const VisualizerId = () => {
     const handleStyleChange = async (style: DesignStyle) => {
         if (!project || !project.sourceImage) return;
         
-        const isStylePremium = !checkPremiumStyle(style);
-        if (isStylePremium && usageInfo && !usageInfo.isPremium) {
-            setUpgradeFeature('premium styles');
+        const styleCheck = checkPremiumStyle(style);
+        
+        if (!styleCheck.isFree) {
+            showUpgradeTrigger(styleCheck.message || `✨ ${style} style is a Pro feature. Upgrade to unlock all premium styles!`, 'premium_style', style);
+            setUpgradeFeature(`${style} style`);
+            setUpgradeTriggerContext('premium_style');
             setShowUpgradeModal(true);
             return;
         }
@@ -268,9 +292,12 @@ const VisualizerId = () => {
     const handlePresetChange = async (preset: PresetCategory) => {
         if (!project || !project.sourceImage) return;
         
-        const isPresetPremium = !checkPremiumPreset(preset);
-        if (isPresetPremium && usageInfo && !usageInfo.isPremium) {
-            setUpgradeFeature('premium presets');
+        const presetCheck = checkPremiumPreset(preset);
+        
+        if (!presetCheck.isFree) {
+            showUpgradeTrigger(presetCheck.message || `💎 ${preset} preset is a Pro feature. Upgrade to unlock all premium presets!`, 'premium_preset', preset);
+            setUpgradeFeature(`${preset} preset`);
+            setUpgradeTriggerContext('premium_preset');
             setShowUpgradeModal(true);
             return;
         }
@@ -338,8 +365,14 @@ const VisualizerId = () => {
 
         if (userId) {
             const limitCheck = await checkRenderLimit(userId);
+            
+            if (limitCheck.showUpgrade) {
+                showUpgradeTrigger(limitCheck.message || '⚠️ You\'re about to hit your render limit. Upgrade to Pro for unlimited renders!', 'render_limit');
+            }
+            
             if (!limitCheck.allowed) {
                 setUpgradeFeature('renders');
+                setUpgradeTriggerContext('render_limit');
                 setShowUpgradeModal(true);
                 return;
             }
@@ -390,9 +423,9 @@ const VisualizerId = () => {
                     timestamp: Date.now(),
                     ownerId: item.ownerId ?? userId ?? null,
                     isPublic: item.isPublic ?? false,
-                }
+                };
 
-                const saved = await createProject({ item: updatedItem, visibility: "private" })
+                const saved = await createProject({ item: updatedItem, visibility: "private" });
 
                 if(saved) {
                     setProject(saved);
@@ -422,9 +455,8 @@ const VisualizerId = () => {
                 setTimeout(() => setGenerationProgress(0), 1000);
             }
         }
-    }
+    };
 
-    // Load project from API
     useEffect(() => {
         let isMounted = true;
 
@@ -468,7 +500,6 @@ const VisualizerId = () => {
         };
     }, [id]);
 
-    // Load share status when project loads
     useEffect(() => {
         if (project && !isPublicView) {
             setIsPublic(project.isPublic || false);
@@ -479,7 +510,6 @@ const VisualizerId = () => {
         }
     }, [project]);
 
-    // Handle initial generation
     useEffect(() => {
         if (
             isProjectLoading ||
@@ -503,7 +533,6 @@ const VisualizerId = () => {
         void runGeneration(project);
     }, [project, isProjectLoading]);
 
-    // Handle share toggle
     const handleShareToggle = async () => {
         if (!project) return;
         
@@ -515,13 +544,24 @@ const VisualizerId = () => {
             if (result.shareUrl) {
                 setShareUrl(result.shareUrl);
             }
-            setProject({
+            
+            // Create updated project with proper typing - spread the entire project and override only changed fields
+            const updatedProject: DesignItem = {
                 ...project,
                 isPublic: newPublicState,
                 shareToken: result.shareToken
-            });
+            };
+            
+            setProject(updatedProject);
         } else {
             alert('Failed to update share settings. Please try again.');
+        }
+    };
+
+    const handleWatermarkClick = () => {
+        if (!usageInfo?.isPremium) {
+            showUpgradeTrigger('🚫 Remove watermark and get unlimited everything with Pro!', 'watermark');
+            setShowUpgradeModal(true);
         }
     };
 
@@ -555,8 +595,8 @@ const VisualizerId = () => {
     const currentStyleName = STYLE_OPTIONS.find(s => s.id === selectedStyle)?.name || selectedStyle;
     const currentPresetName = getPresetName(selectedPreset);
     
-    const isStylePremium = !checkPremiumStyle(selectedStyle);
-    const isPresetPremium = !checkPremiumPreset(selectedPreset);
+    const isStylePremium = !checkPremiumStyle(selectedStyle).isFree;
+    const isPresetPremium = !checkPremiumPreset(selectedPreset).isFree;
     const showPremiumBadge = (isStylePremium || isPresetPremium) && usageInfo && !usageInfo.isPremium;
     const hasWatermark = !usageInfo?.isPremium && currentImage;
 
@@ -572,7 +612,7 @@ const VisualizerId = () => {
                         <button 
                             className="premium-badge-btn"
                             onClick={() => {
-                                setUpgradeFeature('');
+                                showUpgradeTrigger('Unlock unlimited renders, no watermark, and all premium features!', 'watermark');
                                 setShowUpgradeModal(true);
                             }}
                         >
@@ -586,7 +626,6 @@ const VisualizerId = () => {
                 </div>
             </nav>
 
-            {/* Public View Banner */}
             {isPublicView && (
                 <div className="public-view-banner">
                     <Globe size={16} />
@@ -613,8 +652,12 @@ const VisualizerId = () => {
                                     </span>
                                 )}
                                 {hasWatermark && (
-                                    <span className="watermark-badge">
-                                        Watermark • Upgrade to Pro - $19/mo
+                                    <span 
+                                        className="watermark-badge clickable" 
+                                        onClick={handleWatermarkClick}
+                                        style={{ cursor: 'pointer' }}
+                                    >
+                                        Watermark • Click to remove with Pro
                                     </span>
                                 )}
                             </p>
@@ -651,7 +694,6 @@ const VisualizerId = () => {
                         </div>
                     </div>
 
-                    {/* Usage Info Bar */}
                     {usageInfo && !usageInfo.isPremium && !isPublicView && (
                         <div className="usage-info-bar">
                             <div className="usage-stats">
@@ -662,7 +704,7 @@ const VisualizerId = () => {
                             <button 
                                 className="upgrade-link-bar"
                                 onClick={() => {
-                                    setUpgradeFeature('');
+                                    showUpgradeTrigger('Get unlimited everything with Pro!', 'watermark');
                                     setShowUpgradeModal(true);
                                 }}
                             >
@@ -671,7 +713,6 @@ const VisualizerId = () => {
                         </div>
                     )}
 
-                    {/* Style Selector Section */}
                     <div className="style-section">
                         <StyleSelector 
                             selectedStyle={selectedStyle}
@@ -680,7 +721,6 @@ const VisualizerId = () => {
                         />
                     </div>
 
-                    {/* Preset Selector Section */}
                     <div className="preset-section">
                         <PresetSelector 
                             selectedPreset={selectedPreset}
@@ -786,11 +826,12 @@ const VisualizerId = () => {
                 </div>
             </section>
 
-            {/* Modals */}
             <UpgradeModal 
                 isOpen={showUpgradeModal}
                 onClose={() => setShowUpgradeModal(false)}
                 featureName={upgradeFeature}
+                remaining={usageInfo?.rendersRemaining === Infinity ? undefined : usageInfo?.rendersRemaining}
+                triggerContext={upgradeTriggerContext}
             />
 
             <ShareModal 
@@ -802,6 +843,17 @@ const VisualizerId = () => {
                 shareUrl={shareUrl}
                 onTogglePublic={handleShareToggle}
             />
+
+            {showUpgradeToast && (
+                <UpgradeToast
+                    message={toastMessage}
+                    onClose={() => setShowUpgradeToast(false)}
+                    onUpgrade={() => {
+                        setShowUpgradeToast(false);
+                        setShowUpgradeModal(true);
+                    }}
+                />
+            )}
 
             <style>{`
                 .right-actions {
@@ -854,6 +906,17 @@ const VisualizerId = () => {
                     font-size: 0.7rem;
                     font-weight: 500;
                     margin-left: 0.5rem;
+                }
+                
+                .watermark-badge.clickable {
+                    cursor: pointer;
+                    transition: all 0.2s;
+                }
+                
+                .watermark-badge.clickable:hover {
+                    background: #fef3c7;
+                    color: #f97316;
+                    transform: scale(1.02);
                 }
                 
                 .usage-info-bar {
