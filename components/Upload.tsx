@@ -22,7 +22,6 @@ const Upload = ({ onComplete }: UploadProps) => {
 
     const { isSignedIn, userId } = useOutletContext<AuthContext>();
 
-    // Load usage info on mount and when user signs in
     useEffect(() => {
         const loadUsageInfo = async () => {
             if (isSignedIn && userId) {
@@ -57,7 +56,6 @@ const Upload = ({ onComplete }: UploadProps) => {
 
         if (!userId) return;
 
-        // Check render limit before processing
         const limitCheck = await checkRenderLimit(userId);
         
         if (!limitCheck.allowed) {
@@ -76,10 +74,8 @@ const Upload = ({ onComplete }: UploadProps) => {
         reader.onloadend = async () => {
             const base64Data = reader.result as string;
 
-            // Increment render count
             await incrementRenderCount(userId);
             
-            // Update usage info
             const usage = await getRemainingUsage(userId);
             setUsageInfo({
                 remaining: usage.rendersRemaining === Infinity ? -1 : usage.rendersRemaining,
@@ -121,30 +117,45 @@ const Upload = ({ onComplete }: UploadProps) => {
         e.preventDefault();
         setIsDragging(false);
 
-        if (!isSignedIn) return;
+        if (!isSignedIn) {
+            alert('Please sign in to upload floor plans');
+            return;
+        }
 
         const droppedFile = e.dataTransfer.files[0];
         const allowedTypes = ['image/jpeg', 'image/png'];
         if (droppedFile && allowedTypes.includes(droppedFile.type)) {
             processFile(droppedFile);
+        } else {
+            alert('Please upload JPG or PNG files only');
         }
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!isSignedIn) return;
+        if (!isSignedIn) {
+            alert('Please sign in to upload floor plans');
+            return;
+        }
 
         const selectedFile = e.target.files?.[0];
         if (selectedFile) {
-            processFile(selectedFile);
+            const allowedTypes = ['image/jpeg', 'image/png'];
+            if (allowedTypes.includes(selectedFile.type)) {
+                processFile(selectedFile);
+            } else {
+                alert('Please upload JPG or PNG files only');
+            }
         }
     };
+
+    const hasReachedLimit = usageInfo && usageInfo.remaining === 0 && !usageInfo.isPremium;
 
     return (
         <>
             <div className="upload">
                 {!file ? (
                     <div
-                        className={`dropzone ${isDragging ? 'is-dragging' : ''}`}
+                        className={`dropzone ${isDragging ? 'is-dragging' : ''} ${hasReachedLimit ? 'limit-reached' : ''}`}
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
@@ -153,35 +164,33 @@ const Upload = ({ onComplete }: UploadProps) => {
                             type="file"
                             className="drop-input"
                             accept=".jpg,.jpeg,.png,.webp"
-                            disabled={!isSignedIn}
+                            disabled={!isSignedIn || hasReachedLimit}
                             onChange={handleChange}
                         />
 
                         <div className="drop-content">
                             <div className="drop-icon">
-                                <UploadIcon size={20} />
+                                {hasReachedLimit ? <Lock size={20} /> : <UploadIcon size={20} />}
                             </div>
                             <p>
-                                {isSignedIn ? (
-                                    usageInfo && usageInfo.remaining === 0 ? (
-                                        <>You've used all free renders. <button onClick={() => setShowUpgradeModal(true)} className="upgrade-link">Upgrade to continue</button></>
-                                    ) : (
-                                        "Click to upload or just drag and drop"
-                                    )
-                                ) : (
+                                {!isSignedIn ? (
                                     "Sign in or sign up with Puter to upload"
+                                ) : hasReachedLimit ? (
+                                    <>You've used all free renders. <button onClick={() => setShowUpgradeModal(true)} className="upgrade-link">Upgrade to Pro</button></>
+                                ) : (
+                                    "Click to upload or just drag and drop"
                                 )}
                             </p>
                             <p className="help">
-                                Maximum file size 50 MB.
-                                {isSignedIn && usageInfo && usageInfo.remaining > 0 && (
+                                Maximum file size 50 MB. JPG/PNG only.
+                                {isSignedIn && usageInfo && usageInfo.remaining > 0 && !usageInfo.isPremium && (
                                     <span className="usage-info">
-                                        {" "}• {usageInfo.remaining === -1 ? 'Unlimited' : `${usageInfo.remaining}`} render{usageInfo.remaining !== 1 ? 's' : ''} remaining this month
+                                        {" "}• {usageInfo.remaining} render{usageInfo.remaining !== 1 ? 's' : ''} left this month
                                     </span>
                                 )}
-                                {isSignedIn && usageInfo && usageInfo.remaining === 0 && !usageInfo.isPremium && (
-                                    <span className="usage-warning">
-                                        {" "}• <Lock size={12} /> Upgrade for unlimited
+                                {isSignedIn && usageInfo?.isPremium && (
+                                    <span className="premium-info">
+                                        {" "}• ♾️ Unlimited renders (Pro)
                                     </span>
                                 )}
                             </p>
@@ -236,11 +245,19 @@ const Upload = ({ onComplete }: UploadProps) => {
                     font-weight: 500;
                 }
                 
-                .usage-warning {
+                .premium-info {
                     color: #f97316;
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 2px;
+                    font-weight: 500;
+                }
+                
+                .dropzone.limit-reached {
+                    opacity: 0.7;
+                    cursor: not-allowed;
+                }
+                
+                .dropzone.limit-reached .drop-icon {
+                    background: #fee2e2;
+                    color: #ef4444;
                 }
             `}</style>
         </>

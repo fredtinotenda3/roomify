@@ -1,4 +1,4 @@
-// FILE: C:\Users\user\Desktop\roomify\components\UpgradeModal.tsx (UPDATED PRICING)
+// FILE: C:\Users\user\Desktop\roomify\components\UpgradeModal.tsx
 
 import { useState } from 'react';
 import { Crown, X, Check, Sparkles, Zap, Shield, TrendingDown } from 'lucide-react';
@@ -17,18 +17,16 @@ const UpgradeModal = ({ isOpen, onClose, featureName, remaining }: UpgradeModalP
     const [billingInterval, setBillingInterval] = useState<'monthly' | 'yearly'>('monthly');
     const premiumFeatures = getPremiumFeatures();
 
-    const monthlyPrice = PRO_PRICE.monthly; // $19
-    const yearlyPrice = PRO_PRICE.yearly;   // $159
-    const monthlyEquivalent = Math.round(yearlyPrice / 12); // ~$13.25/month
-    const yearlySavings = (monthlyPrice * 12) - yearlyPrice; // $69 savings
+    const monthlyPrice = PRO_PRICE.monthly;
+    const yearlyPrice = PRO_PRICE.yearly;
+    const monthlyEquivalent = Math.round(yearlyPrice / 12);
+    const yearlySavings = (monthlyPrice * 12) - yearlyPrice;
 
     if (!isOpen) return null;
 
     const handleUpgrade = async () => {
         setIsProcessing(true);
-        // Simulate payment processing
         await new Promise(resolve => setTimeout(resolve, 1500));
-        // In production, integrate with Stripe/Paddle here
         const price = billingInterval === 'monthly' ? monthlyPrice : yearlyPrice;
         const interval = billingInterval === 'monthly' ? 'month' : 'year';
         alert(`Pro ${billingInterval} plan - $${price}/${interval}\n\nPayment processing would happen here. Demo mode only.`);
@@ -60,7 +58,6 @@ const UpgradeModal = ({ isOpen, onClose, featureName, remaining }: UpgradeModalP
                     )}
                 </div>
 
-                {/* Billing Toggle */}
                 <div className="billing-toggle">
                     <button
                         className={`toggle-option ${billingInterval === 'monthly' ? 'active' : ''}`}
@@ -187,7 +184,6 @@ const UpgradeModal = ({ isOpen, onClose, featureName, remaining }: UpgradeModalP
                     border: none;
                     cursor: pointer;
                     color: #6b7280;
-                    transition: color 0.2s;
                 }
 
                 .close-btn:hover {

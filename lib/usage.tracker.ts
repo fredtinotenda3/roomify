@@ -1,17 +1,18 @@
-// FILE: C:\Users\user\Desktop\roomify\lib\usage.tracker.ts (UPDATED PRICING)
+// FILE: C:\Users\user\Desktop\roomify\lib\usage.tracker.ts
 
 import puter from "@heyputer/puter.js";
 
+// HARD LIMITS - FREE PLAN
 export const USAGE_LIMITS = {
-    FREE_RENDERS: 3,        // Free users get 3 renders per month
-    FREE_EXPORTS: 5,        // Free users get 5 exports per month
-    FREE_PDF_EXPORTS: 2,    // Free users get 2 PDF exports per month
-    FREE_HIGH_RES: false,    // Free users cannot export high-res
-    PREMIUM_STYLES: ['industrial', 'scandinavian'], // Premium styles (require Pro)
-    PREMIUM_PRESETS: ['luxury', 'traditional']      // Premium presets (require Pro)
+    FREE_RENDERS: 3,        // MAX 3 renders per month
+    FREE_EXPORTS: 5,        // MAX 5 exports per month
+    FREE_PDF_EXPORTS: 2,    // MAX 2 PDF exports per month
+    FREE_HIGH_RES: false,    // No high-res for free
+    PREMIUM_STYLES: ['industrial', 'scandinavian'], // Locked for free
+    PREMIUM_PRESETS: ['luxury', 'traditional']      // Locked for free
 };
 
-// Pro Subscription Pricing
+// Pro Pricing
 export const PRO_PRICE = {
     monthly: 19,
     yearly: 159,
@@ -25,9 +26,9 @@ export interface UsageStats {
     exportCount: number;
     pdfExportCount: number;
     lastResetDate: string;
-    isPremium: boolean;  // true = Pro subscriber
-    subscriptionType?: 'monthly' | 'yearly'; // Track subscription type
-    subscriptionEndDate?: string; // For yearly subscriptions
+    isPremium: boolean;
+    subscriptionType?: 'monthly' | 'yearly';
+    subscriptionEndDate?: string;
 }
 
 const USAGE_KEY_PREFIX = 'roomify_usage_';
@@ -47,10 +48,9 @@ export const getCurrentUser = async (): Promise<any> => {
 export const getUsageStats = async (userId: string): Promise<UsageStats> => {
     try {
         const key = getUserUsageKey(userId);
-        const stats = await puter.kv.get(key);
+        const stats = await puter.kv.get(key) as UsageStats | null;
         
         if (!stats) {
-            // Initialize new user stats
             const newStats: UsageStats = {
                 renderCount: 0,
                 exportCount: 0,
@@ -62,12 +62,11 @@ export const getUsageStats = async (userId: string): Promise<UsageStats> => {
             return newStats;
         }
         
-        // Check if premium subscription has expired (for yearly subscribers)
+        // Check if premium subscription has expired
         if (stats.isPremium && stats.subscriptionEndDate) {
             const endDate = new Date(stats.subscriptionEndDate);
             const now = new Date();
             if (now > endDate) {
-                // Subscription expired
                 const expiredStats: UsageStats = {
                     ...stats,
                     isPremium: false,
@@ -83,13 +82,12 @@ export const getUsageStats = async (userId: string): Promise<UsageStats> => {
             }
         }
         
-        // Check if we need to reset monthly counts
+        // Monthly reset for free users
         const lastReset = new Date(stats.lastResetDate);
         const now = new Date();
         const monthsDiff = (now.getFullYear() - lastReset.getFullYear()) * 12 + (now.getMonth() - lastReset.getMonth());
         
-        if (monthsDiff >= 1) {
-            // Reset monthly counters
+        if (monthsDiff >= 1 && !stats.isPremium) {
             const resetStats: UsageStats = {
                 ...stats,
                 renderCount: 0,
@@ -102,13 +100,13 @@ export const getUsageStats = async (userId: string): Promise<UsageStats> => {
             return resetStats;
         }
         
-        return stats as UsageStats;
+        return stats;
     } catch (error) {
         console.error('Failed to get usage stats:', error);
         return {
-            renderCount: 0,
-            exportCount: 0,
-            pdfExportCount: 0,
+            renderCount: USAGE_LIMITS.FREE_RENDERS,
+            exportCount: USAGE_LIMITS.FREE_EXPORTS,
+            pdfExportCount: USAGE_LIMITS.FREE_PDF_EXPORTS,
             lastResetDate: new Date().toISOString(),
             isPremium: false
         };
@@ -117,25 +115,32 @@ export const getUsageStats = async (userId: string): Promise<UsageStats> => {
 
 export const incrementRenderCount = async (userId: string): Promise<UsageStats> => {
     const stats = await getUsageStats(userId);
-    stats.renderCount++;
+    if (!stats.isPremium) {
+        stats.renderCount++;
+    }
     await puter.kv.set(getUserUsageKey(userId), stats);
     return stats;
 };
 
 export const incrementExportCount = async (userId: string): Promise<UsageStats> => {
     const stats = await getUsageStats(userId);
-    stats.exportCount++;
+    if (!stats.isPremium) {
+        stats.exportCount++;
+    }
     await puter.kv.set(getUserUsageKey(userId), stats);
     return stats;
 };
 
 export const incrementPDFExportCount = async (userId: string): Promise<UsageStats> => {
     const stats = await getUsageStats(userId);
-    stats.pdfExportCount++;
+    if (!stats.isPremium) {
+        stats.pdfExportCount++;
+    }
     await puter.kv.set(getUserUsageKey(userId), stats);
     return stats;
 };
 
+// HARD CHECK: Render limit - NO EXCEPTIONS
 export const checkRenderLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string }> => {
     const stats = await getUsageStats(userId);
     
@@ -149,7 +154,7 @@ export const checkRenderLimit = async (userId: string): Promise<{ allowed: boole
         return {
             allowed: false,
             remaining: 0,
-            message: `You've used all ${USAGE_LIMITS.FREE_RENDERS} free renders. Upgrade to Pro - $19/month or $159/year for unlimited renders!`
+            message: `You've used all ${USAGE_LIMITS.FREE_RENDERS} free renders. Upgrade to Pro ($19/mo) for unlimited renders!`
         };
     }
     
@@ -160,6 +165,7 @@ export const checkRenderLimit = async (userId: string): Promise<{ allowed: boole
     };
 };
 
+// HARD CHECK: Export limit
 export const checkExportLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string }> => {
     const stats = await getUsageStats(userId);
     
@@ -173,7 +179,7 @@ export const checkExportLimit = async (userId: string): Promise<{ allowed: boole
         return {
             allowed: false,
             remaining: 0,
-            message: `You've used all ${USAGE_LIMITS.FREE_EXPORTS} free exports. Upgrade to Pro - $19/month or $159/year for unlimited exports!`
+            message: `You've used all ${USAGE_LIMITS.FREE_EXPORTS} free exports. Upgrade to Pro ($19/mo) for unlimited exports!`
         };
     }
     
@@ -184,6 +190,7 @@ export const checkExportLimit = async (userId: string): Promise<{ allowed: boole
     };
 };
 
+// HARD CHECK: PDF Export limit
 export const checkPDFExportLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string }> => {
     const stats = await getUsageStats(userId);
     
@@ -197,7 +204,7 @@ export const checkPDFExportLimit = async (userId: string): Promise<{ allowed: bo
         return {
             allowed: false,
             remaining: 0,
-            message: `You've used all ${USAGE_LIMITS.FREE_PDF_EXPORTS} free PDF exports. Upgrade to Pro - $19/month or $159/year for unlimited PDF exports!`
+            message: `You've used all ${USAGE_LIMITS.FREE_PDF_EXPORTS} free PDF exports. Upgrade to Pro ($19/mo) for unlimited PDF exports!`
         };
     }
     
@@ -213,10 +220,12 @@ export const checkHighResAccess = async (userId: string): Promise<boolean> => {
     return stats.isPremium;
 };
 
+// HARD CHECK: Premium styles (returns TRUE if free, FALSE if premium/locked)
 export const checkPremiumStyle = (styleId: string): boolean => {
     return !USAGE_LIMITS.PREMIUM_STYLES.includes(styleId as any);
 };
 
+// HARD CHECK: Premium presets (returns TRUE if free, FALSE if premium/locked)
 export const checkPremiumPreset = (presetId: string): boolean => {
     return !USAGE_LIMITS.PREMIUM_PRESETS.includes(presetId as any);
 };
@@ -238,7 +247,6 @@ export const upgradeToPro = async (userId: string, subscriptionType: 'monthly' |
     stats.isPremium = true;
     stats.subscriptionType = subscriptionType;
     
-    // Set subscription end date for yearly (365 days), monthly (30 days)
     const endDate = new Date();
     if (subscriptionType === 'yearly') {
         endDate.setDate(endDate.getDate() + 365);
