@@ -1,15 +1,16 @@
 // FILE: C:\Users\user\Desktop\roomify\app\routes\visualizer.$id.tsx
 
-import { useNavigate, useOutletContext, useParams} from "react-router";
-import {useEffect, useRef, useState} from "react";
-import {generate3DView} from "../../lib/ai.action";
-import {AlertCircle, Box, Download, FileText, RefreshCcw, Share2, X, Crown, Lock} from "lucide-react";
+import { useNavigate, useOutletContext, useParams, useSearchParams } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { generate3DView } from "../../lib/ai.action";
+import { AlertCircle, Box, Download, FileText, RefreshCcw, Share2, X, Crown, Lock, Globe } from "lucide-react";
 import Button from "../../components/ui/Button";
 import StyleSelector from "../../components/StyleSelector";
 import PresetSelector from "../../components/PresetSelector";
 import UpgradeModal from "../../components/UpgradeModal";
-import {createProject, getProjectById} from "../../lib/puter.action";
-import {ReactCompareSlider, ReactCompareSliderImage} from "react-compare-slider";
+import ShareModal from "../../components/ShareModal";
+import { createProject, getProjectById, shareProject, incrementProjectView, getPublicProject } from "../../lib/puter.action";
+import { ReactCompareSlider, ReactCompareSliderImage } from "react-compare-slider";
 import type { DesignStyle } from "../../lib/types";
 import type { PresetCategory } from "../../lib/presets";
 import { STYLE_OPTIONS } from "../../lib/constants";
@@ -32,7 +33,8 @@ import {
 const VisualizerId = () => {
     const { id } = useParams();
     const navigate = useNavigate();
-    const { userId } = useOutletContext<AuthContext>()
+    const { userId, signIn } = useOutletContext<AuthContext>();
+    const [searchParams] = useSearchParams();
 
     const hasInitialGenerated = useRef(false);
     const generationAttempts = useRef(0);
@@ -55,6 +57,13 @@ const VisualizerId = () => {
         pdfExportsRemaining: number;
         isPremium: boolean;
     } | null>(null);
+    
+    // Share states
+    const [showShareModal, setShowShareModal] = useState(false);
+    const [isPublic, setIsPublic] = useState(false);
+    const [shareUrl, setShareUrl] = useState<string | null>(null);
+    const [isPublicView, setIsPublicView] = useState(false);
+    const [ownerName, setOwnerName] = useState<string | null>(null);
 
     const handleBack = () => navigate('/');
 
@@ -70,6 +79,32 @@ const VisualizerId = () => {
         loadUsageInfo();
     }, [userId]);
 
+    // Handle shared/public view
+    useEffect(() => {
+        const shareToken = searchParams.get('share');
+        
+        if (shareToken && id) {
+            setIsPublicView(true);
+            const loadPublicProject = async () => {
+                const publicProject = await getPublicProject(id, shareToken);
+                if (publicProject) {
+                    setProject(publicProject);
+                    setCurrentImage(publicProject.renderedImage || null);
+                    setSelectedStyle(publicProject.style || 'modern');
+                    setSelectedPreset(publicProject.preset || 'budget');
+                    setOwnerName(publicProject.sharedBy || 'Anonymous');
+                    setIsProjectLoading(false);
+                    // Increment view count
+                    await incrementProjectView(id);
+                } else {
+                    setGenerationError('Project not found or share link invalid');
+                    setIsProjectLoading(false);
+                }
+            };
+            loadPublicProject();
+        }
+    }, [id, searchParams]);
+
     const handleExport = async () => {
         if (!currentImage) return;
 
@@ -82,12 +117,10 @@ const VisualizerId = () => {
                 return;
             }
             
-            // Increment export count
             await incrementExportCount(userId);
             await loadUsageInfo();
         }
 
-        // Apply watermark if needed
         const finalImage = await addWatermark(currentImage, usageInfo?.isPremium || false);
         
         const link = document.createElement('a');
@@ -104,7 +137,6 @@ const VisualizerId = () => {
             return;
         }
         
-        // Check PDF export limit
         if (userId) {
             const limitCheck = await checkPDFExportLimit(userId);
             if (!limitCheck.allowed) {
@@ -113,7 +145,6 @@ const VisualizerId = () => {
                 return;
             }
             
-            // Increment PDF export count
             await incrementPDFExportCount(userId);
             await loadUsageInfo();
         }
@@ -127,7 +158,6 @@ const VisualizerId = () => {
                 day: 'numeric'
             });
             
-            // Apply watermark to image for PDF if needed
             const watermarkedImage = await addWatermark(currentImage, usageInfo?.isPremium || false);
             
             await exportToPDF({
@@ -165,7 +195,6 @@ const VisualizerId = () => {
     const handleStyleChange = async (style: DesignStyle) => {
         if (!project || !project.sourceImage) return;
         
-        // Check if style is premium
         const isStylePremium = !checkPremiumStyle(style);
         if (isStylePremium && usageInfo && !usageInfo.isPremium) {
             setUpgradeFeature('premium styles');
@@ -175,7 +204,6 @@ const VisualizerId = () => {
         
         setSelectedStyle(style);
         
-        // Check if we already have this style + preset combination rendered
         const cacheKey = `${style}-${selectedPreset}`;
         if (project.renderedPresets && project.renderedPresets[cacheKey]) {
             const watermarked = await addWatermark(project.renderedPresets[cacheKey], usageInfo?.isPremium || false);
@@ -183,7 +211,6 @@ const VisualizerId = () => {
             return;
         }
         
-        // Generate new style with current preset
         setIsGeneratingNewStyle(true);
         setGenerationError(null);
         setGenerationProgress(0);
@@ -203,12 +230,10 @@ const VisualizerId = () => {
             });
             
             if (result.renderedImage) {
-                // Apply watermark for free users
                 const watermarkedImage = await addWatermark(result.renderedImage, usageInfo?.isPremium || false);
                 setCurrentImage(watermarkedImage);
                 setGenerationProgress(100);
                 
-                // Update project with new style
                 const updatedItem = {
                     ...project,
                     renderedStyles: {
@@ -243,7 +268,6 @@ const VisualizerId = () => {
     const handlePresetChange = async (preset: PresetCategory) => {
         if (!project || !project.sourceImage) return;
         
-        // Check if preset is premium
         const isPresetPremium = !checkPremiumPreset(preset);
         if (isPresetPremium && usageInfo && !usageInfo.isPremium) {
             setUpgradeFeature('premium presets');
@@ -253,7 +277,6 @@ const VisualizerId = () => {
         
         setSelectedPreset(preset);
         
-        // Check if we already have this preset + style combination rendered
         const cacheKey = `${selectedStyle}-${preset}`;
         if (project.renderedPresets && project.renderedPresets[cacheKey]) {
             const watermarked = await addWatermark(project.renderedPresets[cacheKey], usageInfo?.isPremium || false);
@@ -261,7 +284,6 @@ const VisualizerId = () => {
             return;
         }
         
-        // Generate new preset with current style
         setIsGeneratingNewStyle(true);
         setGenerationError(null);
         setGenerationProgress(0);
@@ -281,12 +303,10 @@ const VisualizerId = () => {
             });
             
             if (result.renderedImage) {
-                // Apply watermark for free users
                 const watermarkedImage = await addWatermark(result.renderedImage, usageInfo?.isPremium || false);
                 setCurrentImage(watermarkedImage);
                 setGenerationProgress(100);
                 
-                // Update project with new preset
                 const updatedItem = {
                     ...project,
                     renderedPresets: {
@@ -316,7 +336,6 @@ const VisualizerId = () => {
     const runGeneration = async (item: DesignItem, style: DesignStyle = selectedStyle, preset: PresetCategory = selectedPreset) => {
         if(!id || !item.sourceImage) return;
 
-        // Check render limit before generation
         if (userId) {
             const limitCheck = await checkRenderLimit(userId);
             if (!limitCheck.allowed) {
@@ -345,12 +364,10 @@ const VisualizerId = () => {
             if(result.renderedImage) {
                 console.log('Generation successful, saving result...');
                 
-                // Apply watermark for free users
                 const watermarkedImage = await addWatermark(result.renderedImage, usageInfo?.isPremium || false);
                 setCurrentImage(watermarkedImage);
                 setGenerationProgress(100);
 
-                // Increment render count
                 if (userId) {
                     await incrementRenderCount(userId);
                     await loadUsageInfo();
@@ -407,6 +424,7 @@ const VisualizerId = () => {
         }
     }
 
+    // Load project from API
     useEffect(() => {
         let isMounted = true;
 
@@ -435,7 +453,6 @@ const VisualizerId = () => {
             }
             
             if (fetchedProject?.renderedImage) {
-                // Apply watermark to existing image if needed
                 const watermarked = await addWatermark(fetchedProject.renderedImage, usageInfo?.isPremium || false);
                 setCurrentImage(watermarked);
             }
@@ -451,11 +468,24 @@ const VisualizerId = () => {
         };
     }, [id]);
 
+    // Load share status when project loads
+    useEffect(() => {
+        if (project && !isPublicView) {
+            setIsPublic(project.isPublic || false);
+            if (project.shareToken) {
+                const baseUrl = window.location.origin;
+                setShareUrl(`${baseUrl}/visualizer/${project.id}?share=${project.shareToken}`);
+            }
+        }
+    }, [project]);
+
+    // Handle initial generation
     useEffect(() => {
         if (
             isProjectLoading ||
             hasInitialGenerated.current ||
-            !project?.sourceImage
+            !project?.sourceImage ||
+            isPublicView
         )
             return;
 
@@ -472,6 +502,28 @@ const VisualizerId = () => {
         hasInitialGenerated.current = true;
         void runGeneration(project);
     }, [project, isProjectLoading]);
+
+    // Handle share toggle
+    const handleShareToggle = async () => {
+        if (!project) return;
+        
+        const newPublicState = !isPublic;
+        const result = await shareProject(project.id, newPublicState);
+        
+        if (result.success) {
+            setIsPublic(newPublicState);
+            if (result.shareUrl) {
+                setShareUrl(result.shareUrl);
+            }
+            setProject({
+                ...project,
+                isPublic: newPublicState,
+                shareToken: result.shareToken
+            });
+        } else {
+            alert('Failed to update share settings. Please try again.');
+        }
+    };
 
     if (isProjectLoading) {
         return (
@@ -506,8 +558,6 @@ const VisualizerId = () => {
     const isStylePremium = !checkPremiumStyle(selectedStyle);
     const isPresetPremium = !checkPremiumPreset(selectedPreset);
     const showPremiumBadge = (isStylePremium || isPresetPremium) && usageInfo && !usageInfo.isPremium;
-
-    // Check if current image has watermark (free users)
     const hasWatermark = !usageInfo?.isPremium && currentImage;
 
     return (
@@ -536,6 +586,19 @@ const VisualizerId = () => {
                 </div>
             </nav>
 
+            {/* Public View Banner */}
+            {isPublicView && (
+                <div className="public-view-banner">
+                    <Globe size={16} />
+                    <span>You're viewing a shared design by {ownerName || 'a Roomify user'}</span>
+                    {!userId && (
+                        <Button size="sm" variant="primary" onClick={() => signIn()}>
+                            Sign in to create your own designs
+                        </Button>
+                    )}
+                </div>
+            )}
+
             <section className="content">
                 <div className="panel">
                     <div className="panel-header">
@@ -551,7 +614,7 @@ const VisualizerId = () => {
                                 )}
                                 {hasWatermark && (
                                     <span className="watermark-badge">
-                                 Watermark • Upgrade to Pro - $19/mo
+                                        Watermark • Upgrade to Pro - $19/mo
                                     </span>
                                 )}
                             </p>
@@ -574,23 +637,22 @@ const VisualizerId = () => {
                             >
                                 <FileText className="w-4 h-4 mr-2" /> PDF
                             </Button>
-                            <Button 
-                                size="sm" 
-                                onClick={() => {
-                                    navigator.clipboard?.writeText(window.location.href);
-                                    alert('Link copied to clipboard!');
-                                }} 
-                                className="share" 
-                                disabled={isAnyProcessing}
-                            >
-                                <Share2 className="w-4 h-4 mr-2" />
-                                Share
-                            </Button>
+                            {!isPublicView && (
+                                <Button 
+                                    size="sm" 
+                                    onClick={() => setShowShareModal(true)} 
+                                    className="share"
+                                    disabled={isAnyProcessing}
+                                >
+                                    <Share2 className="w-4 h-4 mr-2" />
+                                    Share
+                                </Button>
+                            )}
                         </div>
                     </div>
 
                     {/* Usage Info Bar */}
-                    {usageInfo && !usageInfo.isPremium && (
+                    {usageInfo && !usageInfo.isPremium && !isPublicView && (
                         <div className="usage-info-bar">
                             <div className="usage-stats">
                                 <span>🎨 {usageInfo.rendersRemaining === Infinity ? '∞' : usageInfo.rendersRemaining} renders left</span>
@@ -724,10 +786,21 @@ const VisualizerId = () => {
                 </div>
             </section>
 
+            {/* Modals */}
             <UpgradeModal 
                 isOpen={showUpgradeModal}
                 onClose={() => setShowUpgradeModal(false)}
                 featureName={upgradeFeature}
+            />
+
+            <ShareModal 
+                isOpen={showShareModal}
+                onClose={() => setShowShareModal(false)}
+                projectId={project?.id || id || ''}
+                projectName={project?.name || `Residence ${id}`}
+                isPublic={isPublic}
+                shareUrl={shareUrl}
+                onTogglePublic={handleShareToggle}
             />
 
             <style>{`
@@ -824,6 +897,18 @@ const VisualizerId = () => {
                     background: #ea580c;
                 }
                 
+                .public-view-banner {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 1rem;
+                    padding: 0.75rem;
+                    background: linear-gradient(135deg, #fef3c7, #fde68a);
+                    border-bottom: 1px solid #fbbf24;
+                    font-size: 0.875rem;
+                    flex-wrap: wrap;
+                }
+                
                 .style-section {
                     padding: 1rem 1.5rem;
                     border-bottom: 1px solid #f3f4f6;
@@ -882,6 +967,11 @@ const VisualizerId = () => {
                     
                     .right-actions {
                         gap: 0.5rem;
+                    }
+                    
+                    .public-view-banner {
+                        flex-direction: column;
+                        text-align: center;
                     }
                 }
             `}</style>

@@ -4,7 +4,7 @@ import puter from "@heyputer/puter.js";
 import { getOrCreateHostingConfig, uploadImageToHosting } from "./puter.hosting";
 import { isHostedUrl } from "./utils";
 import { PUTER_WORKER_URL } from "./constants";
-import type { DesignItem, CreateProjectParams } from "./types";
+import type { DesignItem, CreateProjectParams, PublicProject, GalleryFilter } from "./types";
 
 export const signIn = async () => await puter.auth.signIn();
 
@@ -180,7 +180,7 @@ export const deleteProject = async (id: string): Promise<boolean> => {
 
     try {
         const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/projects/delete`, {
-            method: 'POST',  // Changed from DELETE to POST to avoid CORS issues
+            method: 'POST',
             body: JSON.stringify({ id })
         });
 
@@ -241,5 +241,124 @@ export const getFavorites = async (): Promise<string[]> => {
     } catch (e) {
         console.error('Failed to get favorites:', e);
         return [];
+    }
+};
+
+// SHARE SYSTEM FUNCTIONS
+
+export const shareProject = async (id: string, isPublic: boolean): Promise<{ success: boolean; shareUrl?: string; shareToken?: string }> => {
+    if (!PUTER_WORKER_URL) {
+        console.warn('Missing VITE_PUTER_WORKER_URL');
+        return { success: false };
+    }
+
+    try {
+        const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/projects/share`, {
+            method: 'POST',
+            body: JSON.stringify({ id, isPublic })
+        });
+
+        if (!response.ok) {
+            console.error('Failed to share project', await response.text());
+            return { success: false };
+        }
+
+        const data = await response.json();
+        return { 
+            success: true, 
+            shareUrl: data.shareUrl, 
+            shareToken: data.shareToken 
+        };
+    } catch (e) {
+        console.error('Failed to share project:', e);
+        return { success: false };
+    }
+};
+
+export const getPublicGallery = async (filter: GalleryFilter): Promise<{ projects: PublicProject[]; total: number }> => {
+    if (!PUTER_WORKER_URL) {
+        console.warn('Missing VITE_PUTER_WORKER_URL');
+        return { projects: [], total: 0 };
+    }
+
+    try {
+        const params = new URLSearchParams();
+        params.append('limit', '20');
+        params.append('offset', '0');
+        params.append('sortBy', filter.sortBy);
+        if (filter.style) params.append('style', filter.style);
+        if (filter.preset) params.append('preset', filter.preset);
+        if (filter.search) params.append('search', filter.search);
+
+        const response = await puter.workers.exec(
+            `${PUTER_WORKER_URL}/api/projects/gallery?${params.toString()}`,
+            { method: 'GET' }
+        );
+
+        if (!response.ok) {
+            console.error('Failed to get gallery', await response.text());
+            return { projects: [], total: 0 };
+        }
+
+        const data = await response.json();
+        return { 
+            projects: data.projects || [], 
+            total: data.total || 0 
+        };
+    } catch (e) {
+        console.error('Failed to get gallery:', e);
+        return { projects: [], total: 0 };
+    }
+};
+
+export const incrementProjectView = async (id: string): Promise<boolean> => {
+    if (!PUTER_WORKER_URL) return false;
+
+    try {
+        const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/projects/view`, {
+            method: 'POST',
+            body: JSON.stringify({ id })
+        });
+
+        return response.ok;
+    } catch (e) {
+        console.error('Failed to increment view:', e);
+        return false;
+    }
+};
+
+export const likeProject = async (id: string, like: boolean): Promise<{ success: boolean; likeCount?: number }> => {
+    if (!PUTER_WORKER_URL) return { success: false };
+
+    try {
+        const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/projects/like`, {
+            method: 'POST',
+            body: JSON.stringify({ id, like })
+        });
+
+        if (!response.ok) return { success: false };
+
+        const data = await response.json();
+        return { success: true, likeCount: data.likeCount };
+    } catch (e) {
+        console.error('Failed to like project:', e);
+        return { success: false };
+    }
+};
+
+export const getPublicProject = async (id: string, shareToken?: string): Promise<DesignItem | null> => {
+    if (!PUTER_WORKER_URL) return null;
+
+    try {
+        const url = `${PUTER_WORKER_URL}/api/projects/get?id=${encodeURIComponent(id)}${shareToken ? `&token=${shareToken}` : ''}`;
+        const response = await puter.workers.exec(url, { method: 'GET' });
+
+        if (!response.ok) return null;
+
+        const data = await response.json();
+        return data.project || null;
+    } catch (e) {
+        console.error('Failed to get public project:', e);
+        return null;
     }
 };

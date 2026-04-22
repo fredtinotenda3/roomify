@@ -1,3 +1,5 @@
+// FILE: C:\Users\user\Desktop\roomify\components\Navbar.tsx
+
 import {Box} from "lucide-react";
 import Button from "./ui/Button";
 import {useOutletContext} from "react-router";
@@ -36,7 +38,8 @@ const Navbar = () => {
                     </div>
 
                     <ul className="links">
-                        <a href="#">Product</a>
+                        <a href="/">Product</a>
+                        <a href="/gallery">Gallery</a>
                         <a href="#">Pricing</a>
                         <a href="#">Community</a>
                         <a href="#">Enterprise</a>

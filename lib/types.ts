@@ -31,10 +31,13 @@ export interface DesignItem {
     sharedBy?: string | null;
     sharedAt?: string | null;
     isPublic?: boolean;
+    shareToken?: string | null;
     style?: DesignStyle;
     preset?: PresetCategory;
     renderedStyles?: Record<DesignStyle, string>;
     renderedPresets?: Record<string, string>;
+    viewCount?: number;
+    likeCount?: number;
 }
 
 export interface DesignConfig {
@@ -63,6 +66,7 @@ export type VisualizerLocationState = {
     ownerId?: string | null;
     name?: string | null;
     sharedBy?: string | null;
+    isPublicView?: boolean;
 };
 
 export interface VisualizerProps {
@@ -77,6 +81,7 @@ export interface VisualizerProps {
     isPublic?: boolean;
     sharedBy?: string | null;
     canUnshare?: boolean;
+    isPublicView?: boolean;
 }
 
 export interface UploadProps {
@@ -138,4 +143,17 @@ export interface Generate3DViewParams {
     projectId?: string | null;
     style?: DesignStyle;
     preset?: PresetCategory;
+}
+
+// Public Gallery Types
+export interface PublicProject extends DesignItem {
+    ownerName?: string;
+    isLiked?: boolean;
+}
+
+export interface GalleryFilter {
+    sortBy: 'recent' | 'popular' | 'mostLiked';
+    style?: DesignStyle;
+    preset?: PresetCategory;
+    search?: string;
 }
