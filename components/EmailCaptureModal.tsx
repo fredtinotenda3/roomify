@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { X, Mail, ArrowRight, Sparkles, Crown } from 'lucide-react';
 import Button from './ui/Button';
+import { subscribeEmail } from '../lib/email.storage';
 
 interface EmailCaptureModalProps {
     isOpen: boolean;
@@ -10,6 +11,22 @@ interface EmailCaptureModalProps {
     onSuccess: (email: string) => void;
     triggerReason?: 'gallery_view' | 'save_project' | 'create_project' | 'view_count';
 }
+
+// Map triggerReason to email source type
+const mapTriggerToSource = (trigger: string): 'gallery' | 'upload' | 'generation' | 'dashboard' | 'signup' => {
+    switch(trigger) {
+        case 'gallery_view':
+            return 'gallery';
+        case 'save_project':
+            return 'dashboard';
+        case 'create_project':
+            return 'generation';
+        case 'view_count':
+            return 'gallery';
+        default:
+            return 'signup';
+    }
+};
 
 const EmailCaptureModal = ({ isOpen, onClose, onSuccess, triggerReason = 'gallery_view' }: EmailCaptureModalProps) => {
     const [email, setEmail] = useState('');
@@ -64,14 +81,26 @@ const EmailCaptureModal = ({ isOpen, onClose, onSuccess, triggerReason = 'galler
         setIsLoading(true);
         setError('');
         
-        // Simulate API call - in production, save to your database
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Map triggerReason to source type
+        const source = mapTriggerToSource(triggerReason);
         
-        // Store email in localStorage to remember user
-        localStorage.setItem('roomify_captured_email', email);
-        localStorage.setItem('roomify_capture_date', new Date().toISOString());
+        // Store email in backend
+        const result = await subscribeEmail(email, source, undefined, {
+            page: window.location.pathname,
+            userAgent: navigator.userAgent,
+            triggerReason
+        });
         
-        onSuccess(email);
+        if (result.success) {
+            // Store email in localStorage to remember user
+            localStorage.setItem('roomify_captured_email', email);
+            localStorage.setItem('roomify_capture_date', new Date().toISOString());
+            
+            onSuccess(email);
+        } else {
+            setError(result.message || 'Failed to subscribe. Please try again.');
+        }
+        
         setIsLoading(false);
     };
 

@@ -20,6 +20,7 @@ import {
 } from "../lib/puter.action";
 import { analytics, trackPageView } from "../lib/analytics";
 import AnalyticsDashboard from "../components/AnalyticsDashboard";
+import EmailDashboard from "components/EmailDashboard";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -137,6 +138,8 @@ export default function App() {
             isAdmin={true} 
             userId={authState.userId || undefined}
         />
+
+        <EmailDashboard isAdmin={true} />
       </main>
   )
 }
