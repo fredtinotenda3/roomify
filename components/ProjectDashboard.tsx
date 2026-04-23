@@ -18,6 +18,7 @@ import Button from './ui/Button';
 import EmailCaptureModal from './EmailCaptureModal';
 import { getProjects, deleteProject, renameProject, toggleFavorite, getFavorites } from '../lib/puter.action';
 import UpgradeModal from './UpgradeModal';
+import { analytics } from '../lib/analytics';
 import type { DesignItem } from '../lib/types';
 
 interface ProjectDashboardProps {
@@ -58,6 +59,7 @@ const ProjectDashboard = ({ userId, isPremium }: ProjectDashboardProps) => {
         setProjects(sorted);
         filterProjects(sorted, searchTerm, filterType, favs);
         setLoading(false);
+        analytics.pageView('project_dashboard');
     };
 
     const filterProjects = (projs: DesignItem[], term: string, filter: string, favs: string[]) => {
@@ -92,56 +94,76 @@ const ProjectDashboard = ({ userId, isPremium }: ProjectDashboardProps) => {
     const handleRename = async (id: string, newName: string) => {
         if (!newName.trim()) return;
         
+        analytics.click('rename_button', { projectId: id });
+        
         const hasEmail = localStorage.getItem('roomify_captured_email');
         
         if (!hasEmail) {
             setPendingAction({ type: 'rename', data: { id, newName } });
             setShowEmailCapture(true);
+            analytics.dropOff('rename_without_email');
             return;
         }
         
         const success = await renameProject(id, newName);
         if (success) {
             await loadProjects();
+            analytics.featureUsed('rename_project');
+            analytics.conversion('project_renamed');
         }
         setEditingId(null);
         setEditName('');
     };
 
     const handleDelete = async (id: string) => {
+        analytics.click('delete_button', { projectId: id });
+        
         const hasEmail = localStorage.getItem('roomify_captured_email');
         
         if (!hasEmail) {
             setPendingAction({ type: 'delete', data: { id } });
             setShowEmailCapture(true);
+            analytics.dropOff('delete_without_email');
             return;
         }
         
         const success = await deleteProject(id);
         if (success) {
             await loadProjects();
+            analytics.featureUsed('delete_project');
+            analytics.conversion('project_deleted');
         }
         setShowDeleteConfirm(null);
     };
 
     const handleToggleFavorite = async (id: string) => {
         const isFavorite = favorites.includes(id);
+        analytics.click('favorite_button', { projectId: id, isFavorite: !isFavorite });
+        
         const success = await toggleFavorite(id, !isFavorite);
         if (success) {
             let newFavorites: string[];
             if (!isFavorite) {
                 newFavorites = [...favorites, id];
+                analytics.featureUsed('add_favorite');
             } else {
                 newFavorites = favorites.filter(f => f !== id);
+                analytics.featureUsed('remove_favorite');
             }
             setFavorites(newFavorites);
             filterProjects(projects, searchTerm, filterType, newFavorites);
         }
     };
 
+    const handleProjectClick = (projectId: string) => {
+        analytics.click('dashboard_project_click', { projectId });
+        navigate(`/visualizer/${projectId}`);
+    };
+
     const handleEmailCaptureSuccess = (email: string) => {
         console.log('Email captured:', email);
         setShowEmailCapture(false);
+        analytics.conversion('email_captured_from_dashboard');
         
         // Retry pending action
         if (pendingAction) {
@@ -178,7 +200,10 @@ const ProjectDashboard = ({ userId, isPremium }: ProjectDashboardProps) => {
                         type="text"
                         placeholder="Search by name or ID..."
                         value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onChange={(e) => {
+                            setSearchTerm(e.target.value);
+                            analytics.click('dashboard_search');
+                        }}
                     />
                     {searchTerm && (
                         <button onClick={() => setSearchTerm('')} className="clear-search">
@@ -190,20 +215,29 @@ const ProjectDashboard = ({ userId, isPremium }: ProjectDashboardProps) => {
                 <div className="filter-buttons">
                     <button
                         className={`filter-btn ${filterType === 'all' ? 'active' : ''}`}
-                        onClick={() => setFilterType('all')}
+                        onClick={() => {
+                            setFilterType('all');
+                            analytics.click('dashboard_filter', { filter: 'all' });
+                        }}
                     >
                         All
                     </button>
                     <button
                         className={`filter-btn ${filterType === 'favorites' ? 'active' : ''}`}
-                        onClick={() => setFilterType('favorites')}
+                        onClick={() => {
+                            setFilterType('favorites');
+                            analytics.click('dashboard_filter', { filter: 'favorites' });
+                        }}
                     >
                         <Star size={14} />
                         Favorites
                     </button>
                     <button
                         className={`filter-btn ${filterType === 'recent' ? 'active' : ''}`}
-                        onClick={() => setFilterType('recent')}
+                        onClick={() => {
+                            setFilterType('recent');
+                            analytics.click('dashboard_filter', { filter: 'recent' });
+                        }}
                     >
                         <Clock size={14} />
                         Recent
@@ -213,13 +247,19 @@ const ProjectDashboard = ({ userId, isPremium }: ProjectDashboardProps) => {
                 <div className="sort-buttons">
                     <button
                         className={`sort-btn ${sortBy === 'date' ? 'active' : ''}`}
-                        onClick={() => setSortBy('date')}
+                        onClick={() => {
+                            setSortBy('date');
+                            analytics.click('dashboard_sort', { sortBy: 'date' });
+                        }}
                     >
                         Sort by Date
                     </button>
                     <button
                         className={`sort-btn ${sortBy === 'name' ? 'active' : ''}`}
-                        onClick={() => setSortBy('name')}
+                        onClick={() => {
+                            setSortBy('name');
+                            analytics.click('dashboard_sort', { sortBy: 'name' });
+                        }}
                     >
                         Sort by Name
                     </button>
@@ -267,7 +307,7 @@ const ProjectDashboard = ({ userId, isPremium }: ProjectDashboardProps) => {
                         <div key={project.id} className="project-card-dashboard">
                             <div 
                                 className="project-preview"
-                                onClick={() => navigate(`/visualizer/${project.id}`)}
+                                onClick={() => handleProjectClick(project.id)}
                             >
                                 <img 
                                     src={project.renderedImage || project.sourceImage} 
@@ -302,7 +342,7 @@ const ProjectDashboard = ({ userId, isPremium }: ProjectDashboardProps) => {
                                 ) : (
                                     <>
                                         <div className="project-name-row">
-                                            <h3 onClick={() => navigate(`/visualizer/${project.id}`)}>
+                                            <h3 onClick={() => handleProjectClick(project.id)}>
                                                 {project.name || `Project ${project.id.slice(-6)}`}
                                             </h3>
                                             <div className="project-actions">
@@ -310,6 +350,7 @@ const ProjectDashboard = ({ userId, isPremium }: ProjectDashboardProps) => {
                                                     onClick={() => {
                                                         setEditingId(project.id);
                                                         setEditName(project.name || '');
+                                                        analytics.click('edit_name_icon', { projectId: project.id });
                                                     }}
                                                     className="action-btn"
                                                     title="Rename"

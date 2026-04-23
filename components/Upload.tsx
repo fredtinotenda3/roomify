@@ -7,6 +7,7 @@ import { PROGRESS_INCREMENT, REDIRECT_DELAY_MS, PROGRESS_INTERVAL_MS } from "../
 import { checkRenderLimit, incrementRenderCount, getRemainingUsage } from "../lib/usage.tracker";
 import UpgradeModal from './UpgradeModal';
 import EmailCaptureModal from './EmailCaptureModal';
+import { analytics } from '../lib/analytics';
 
 interface UploadProps {
     onComplete?: (base64Data: string) => void;
@@ -52,17 +53,23 @@ const Upload = ({ onComplete }: UploadProps) => {
     }, []);
 
     const processFile = useCallback(async (file: File) => {
+        // Track upload attempt
+        analytics.featureUsed('upload_attempt');
+        analytics.click('upload_button');
+        
         // Check if user has email captured
         const hasEmail = localStorage.getItem('roomify_captured_email');
         
         if (!hasEmail && !isSignedIn) {
             setPendingFile(file);
             setShowEmailCapture(true);
+            analytics.dropOff('email_capture_required');
             return;
         }
         
         if (!isSignedIn) {
             alert('Please sign in to upload floor plans');
+            analytics.dropOff('sign_in_required');
             return;
         }
 
@@ -72,6 +79,7 @@ const Upload = ({ onComplete }: UploadProps) => {
         
         if (!limitCheck.allowed) {
             setShowUpgradeModal(true);
+            analytics.dropOff('render_limit_reached');
             return;
         }
 
@@ -82,6 +90,7 @@ const Upload = ({ onComplete }: UploadProps) => {
         reader.onerror = () => {
             setFile(null);
             setProgress(0);
+            analytics.error('file_read_error');
         };
         reader.onloadend = async () => {
             const base64Data = reader.result as string;
@@ -93,6 +102,9 @@ const Upload = ({ onComplete }: UploadProps) => {
                 remaining: usage.rendersRemaining === Infinity ? -1 : usage.rendersRemaining,
                 isPremium: usage.isPremium
             });
+
+            // Track successful upload
+            analytics.conversion('upload_complete');
 
             intervalRef.current = setInterval(() => {
                 setProgress((prev) => {
@@ -118,6 +130,7 @@ const Upload = ({ onComplete }: UploadProps) => {
     const handleEmailCaptureSuccess = (email: string) => {
         console.log('Email captured:', email);
         setShowEmailCapture(false);
+        analytics.conversion('email_captured');
         if (pendingFile) {
             processFile(pendingFile);
             setPendingFile(null);
@@ -128,6 +141,7 @@ const Upload = ({ onComplete }: UploadProps) => {
         e.preventDefault();
         if (!isSignedIn) return;
         setIsDragging(true);
+        analytics.click('drag_over');
     };
 
     const handleDragLeave = () => {
@@ -140,21 +154,25 @@ const Upload = ({ onComplete }: UploadProps) => {
 
         if (!isSignedIn) {
             alert('Please sign in to upload floor plans');
+            analytics.dropOff('drop_without_signin');
             return;
         }
 
         const droppedFile = e.dataTransfer.files[0];
         const allowedTypes = ['image/jpeg', 'image/png'];
         if (droppedFile && allowedTypes.includes(droppedFile.type)) {
+            analytics.featureUsed('drag_drop_upload');
             processFile(droppedFile);
         } else {
             alert('Please upload JPG or PNG files only');
+            analytics.error('invalid_file_type');
         }
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!isSignedIn) {
             alert('Please sign in to upload floor plans');
+            analytics.dropOff('click_upload_without_signin');
             return;
         }
 
@@ -165,6 +183,7 @@ const Upload = ({ onComplete }: UploadProps) => {
                 processFile(selectedFile);
             } else {
                 alert('Please upload JPG or PNG files only');
+                analytics.error('invalid_file_type_selected');
             }
         }
     };

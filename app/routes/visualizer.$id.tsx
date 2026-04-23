@@ -18,6 +18,7 @@ import type { PresetCategory } from "../../lib/presets";
 import { STYLE_OPTIONS } from "../../lib/constants";
 import { exportToPDF } from "../../lib/pdf.export";
 import { addWatermark } from "../../lib/watermark";
+import { analytics } from "../../lib/analytics";
 import { 
     checkRenderLimit, 
     checkExportLimit, 
@@ -111,9 +112,11 @@ const VisualizerId = () => {
                     setOwnerName(publicProject.sharedBy || 'Anonymous');
                     setIsProjectLoading(false);
                     await incrementProjectView(id);
+                    analytics.pageView(`public_view_${id}`);
                 } else {
                     setGenerationError('Project not found or share link invalid');
                     setIsProjectLoading(false);
+                    analytics.error('public_project_not_found');
                 }
             };
             loadPublicProject();
@@ -122,6 +125,9 @@ const VisualizerId = () => {
 
     const handleExport = async () => {
         if (!currentImage) return;
+
+        analytics.featureUsed('export_png');
+        analytics.click('export_png_button');
 
         if (userId) {
             const limitCheck = await checkExportLimit(userId);
@@ -134,6 +140,7 @@ const VisualizerId = () => {
                 setUpgradeFeature('exports');
                 setUpgradeTriggerContext('export_limit');
                 setShowUpgradeModal(true);
+                analytics.dropOff('export_limit_reached');
                 return;
             }
             
@@ -149,6 +156,8 @@ const VisualizerId = () => {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        
+        analytics.conversion('png_export_complete');
     }
     
     const handlePDFExport = async () => {
@@ -156,6 +165,9 @@ const VisualizerId = () => {
             alert('Both original and rendered images are required for PDF export');
             return;
         }
+        
+        analytics.featureUsed('export_pdf');
+        analytics.click('export_pdf_button');
         
         if (userId) {
             const limitCheck = await checkPDFExportLimit(userId);
@@ -168,6 +180,7 @@ const VisualizerId = () => {
                 setUpgradeFeature('PDF exports');
                 setUpgradeTriggerContext('pdf_limit');
                 setShowUpgradeModal(true);
+                analytics.dropOff('pdf_limit_reached');
                 return;
             }
             
@@ -194,9 +207,12 @@ const VisualizerId = () => {
                 date: date,
                 projectId: id || 'unknown'
             });
+            
+            analytics.conversion('pdf_export_complete');
         } catch (error) {
             console.error('PDF export failed:', error);
             alert('Failed to generate PDF. Please make sure images are loaded and try again.');
+            analytics.error('pdf_export_failed');
         }
     };
     
@@ -223,11 +239,14 @@ const VisualizerId = () => {
         
         const styleCheck = checkPremiumStyle(style);
         
+        analytics.click('style_selected', { style, isPremium: !styleCheck.isFree });
+        
         if (!styleCheck.isFree) {
             showUpgradeTrigger(styleCheck.message || `✨ ${style} style is a Pro feature. Upgrade to unlock all premium styles!`, 'premium_style', style);
             setUpgradeFeature(`${style} style`);
             setUpgradeTriggerContext('premium_style');
             setShowUpgradeModal(true);
+            analytics.dropOff('premium_style_clicked');
             return;
         }
         
@@ -283,10 +302,12 @@ const VisualizerId = () => {
                 if (saved) {
                     setProject(saved);
                 }
+                analytics.conversion('style_generated', { style });
             }
         } catch (error) {
             console.error('Style generation failed:', error);
             setGenerationError(error instanceof Error ? error.message : 'Failed to generate this style');
+            analytics.error('style_generation_failed');
         } finally {
             clearInterval(progressInterval);
             setIsGeneratingNewStyle(false);
@@ -299,11 +320,14 @@ const VisualizerId = () => {
         
         const presetCheck = checkPremiumPreset(preset);
         
+        analytics.click('preset_selected', { preset, isPremium: !presetCheck.isFree });
+        
         if (!presetCheck.isFree) {
             showUpgradeTrigger(presetCheck.message || `💎 ${preset} preset is a Pro feature. Upgrade to unlock all premium presets!`, 'premium_preset', preset);
             setUpgradeFeature(`${preset} preset`);
             setUpgradeTriggerContext('premium_preset');
             setShowUpgradeModal(true);
+            analytics.dropOff('premium_preset_clicked');
             return;
         }
         
@@ -354,10 +378,12 @@ const VisualizerId = () => {
                 if (saved) {
                     setProject(saved);
                 }
+                analytics.conversion('preset_generated', { preset });
             }
         } catch (error) {
             console.error('Preset generation failed:', error);
             setGenerationError(error instanceof Error ? error.message : 'Failed to generate with this preset');
+            analytics.error('preset_generation_failed');
         } finally {
             clearInterval(progressInterval);
             setIsGeneratingNewStyle(false);
@@ -368,12 +394,17 @@ const VisualizerId = () => {
     const runGeneration = async (item: DesignItem, style: DesignStyle = selectedStyle, preset: PresetCategory = selectedPreset) => {
         if(!id || !item.sourceImage) return;
 
+        // Track generation attempt
+        analytics.featureUsed('render_generation');
+        analytics.click('generate_button', { style, preset });
+
         // Check for email capture - if no email and not signed in, show capture modal
         const hasEmail = localStorage.getItem('roomify_captured_email');
         
         if (!hasEmail && !userId) {
             setPendingGeneration({ style, preset });
             setShowEmailCapture(true);
+            analytics.dropOff('generation_email_capture_required');
             return;
         }
 
@@ -388,6 +419,7 @@ const VisualizerId = () => {
                 setUpgradeFeature('renders');
                 setUpgradeTriggerContext('render_limit');
                 setShowUpgradeModal(true);
+                analytics.dropOff('render_limit_reached');
                 return;
             }
         }
@@ -444,6 +476,9 @@ const VisualizerId = () => {
                 if(saved) {
                     setProject(saved);
                 }
+                
+                // Track successful generation
+                analytics.conversion('render_complete', { style, preset });
             } else {
                 throw new Error('No rendered image in response');
             }
@@ -451,6 +486,7 @@ const VisualizerId = () => {
             clearInterval(progressInterval);
         } catch (error) {
             console.error('Generation failed: ', error);
+            analytics.error('generation_failed');
             
             if (generationAttempts.current < MAX_RETRIES) {
                 generationAttempts.current++;
@@ -474,6 +510,7 @@ const VisualizerId = () => {
     const handleEmailCaptureSuccess = (email: string) => {
         console.log('Email captured:', email);
         setShowEmailCapture(false);
+        analytics.conversion('email_captured_from_generation');
         
         // Retry generation if pending
         if (pendingGeneration && project) {
@@ -561,6 +598,8 @@ const VisualizerId = () => {
     const handleShareToggle = async () => {
         if (!project) return;
         
+        analytics.click('share_toggle', { isPublic: !isPublic });
+        
         const newPublicState = !isPublic;
         const result = await shareProject(project.id, newPublicState);
         
@@ -570,7 +609,6 @@ const VisualizerId = () => {
                 setShareUrl(result.shareUrl);
             }
             
-            // Create updated project with proper typing
             const updatedProject: DesignItem = {
                 ...project,
                 isPublic: newPublicState,
@@ -578,13 +616,16 @@ const VisualizerId = () => {
             };
             
             setProject(updatedProject);
+            analytics.conversion(newPublicState ? 'project_made_public' : 'project_made_private');
         } else {
             alert('Failed to update share settings. Please try again.');
+            analytics.error('share_toggle_failed');
         }
     };
 
     const handleWatermarkClick = () => {
         if (!usageInfo?.isPremium) {
+            analytics.click('watermark_clicked');
             showUpgradeTrigger('🚫 Remove watermark and get unlimited everything with Pro!', 'watermark');
             setShowUpgradeModal(true);
         }
@@ -637,6 +678,8 @@ const VisualizerId = () => {
                         <button 
                             className="premium-badge-btn"
                             onClick={() => {
+                                analytics.click('upgrade_button_clicked');
+                                analytics.conversion('upgrade_modal_shown');
                                 showUpgradeTrigger('Unlock unlimited renders, no watermark, and all premium features!', 'watermark');
                                 setShowUpgradeModal(true);
                             }}
@@ -729,6 +772,7 @@ const VisualizerId = () => {
                             <button 
                                 className="upgrade-link-bar"
                                 onClick={() => {
+                                    analytics.click('usage_bar_upgrade_clicked');
                                     showUpgradeTrigger('Get unlimited everything with Pro!', 'watermark');
                                     setShowUpgradeModal(true);
                                 }}
@@ -884,6 +928,7 @@ const VisualizerId = () => {
                     message={toastMessage}
                     onClose={() => setShowUpgradeToast(false)}
                     onUpgrade={() => {
+                        analytics.click('toast_upgrade_clicked');
                         setShowUpgradeToast(false);
                         setShowUpgradeModal(true);
                     }}

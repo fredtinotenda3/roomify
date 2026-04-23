@@ -1,3 +1,5 @@
+// FILE: C:\Users\user\Desktop\roomify\app\root.tsx
+
 import {
   isRouteErrorResponse,
   Links,
@@ -5,6 +7,7 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useLocation,
 } from "react-router";
 
 import type { Route } from "./+types/root";
@@ -15,6 +18,8 @@ import {
     signIn as puterSignIn,
     signOut as puterSignOut,
 } from "../lib/puter.action";
+import { analytics, trackPageView } from "../lib/analytics";
+import AnalyticsDashboard from "../components/AnalyticsDashboard";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -54,7 +59,22 @@ const DEFAULT_AUTH_STATE: AuthState = {
 }
 
 export default function App() {
+    const location = useLocation();
     const [authState, setAuthState] = useState<AuthState>(DEFAULT_AUTH_STATE);
+
+    // Track page views
+    useEffect(() => {
+        trackPageView(location.pathname);
+    }, [location]);
+
+    // Set user ID in analytics when auth changes
+    useEffect(() => {
+        if (authState.userId) {
+            analytics.setUserId(authState.userId);
+        } else {
+            analytics.setUserId(null);
+        }
+    }, [authState.userId]);
 
     const refreshAuth = async () => {
         try {
@@ -78,8 +98,13 @@ export default function App() {
     }, []);
 
     const signIn = async () => {
+        analytics.conversion('sign_in_start');
         await puterSignIn();
-        return await refreshAuth();
+        const result = await refreshAuth();
+        if (result) {
+            analytics.conversion('sign_in_complete');
+        }
+        return result;
     }
 
     const signOut = async () => {
@@ -91,7 +116,8 @@ export default function App() {
       <main className="min-h-screen bg-background text-foreground relative z-10">
         <Outlet
             context={{ ...authState, refreshAuth, signIn, signOut }}
-        />;
+        />
+        <AnalyticsDashboard isAdmin={true} />
       </main>
   )
 }
@@ -100,6 +126,11 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   let message = "Oops!";
   let details = "An unexpected error occurred.";
   let stack: string | undefined;
+
+  // Track error in analytics
+  useEffect(() => {
+    analytics.error(error instanceof Error ? error.message : 'Unknown error');
+  }, [error]);
 
   if (isRouteErrorResponse(error)) {
     message = error.status === 404 ? "404" : "Error";

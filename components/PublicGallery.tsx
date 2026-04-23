@@ -6,6 +6,7 @@ import { Search, Heart, Eye, Clock, Filter, X, Grid3X3, List, Sparkles } from 'l
 import Button from './ui/Button';
 import EmailCaptureModal from './EmailCaptureModal';
 import { getPublicGallery, likeProject } from '../lib/puter.action';
+import { analytics } from '../lib/analytics';
 import type { PublicProject, GalleryFilter } from '../lib/types';
 import { STYLE_OPTIONS } from '../lib/constants';
 import { DESIGN_PRESETS } from '../lib/presets';
@@ -25,6 +26,7 @@ const PublicGallery = () => {
         const result = await getPublicGallery(filter);
         setProjects(result.projects);
         setLoading(false);
+        analytics.pageView('gallery');
     };
 
     useEffect(() => {
@@ -41,6 +43,7 @@ const PublicGallery = () => {
                 setCaptureReason('gallery_view');
                 setShowEmailCapture(true);
                 localStorage.setItem('roomify_capture_shown', 'true');
+                analytics.conversion('gallery_email_capture_shown');
             }, 3000);
             
             return () => clearTimeout(timer);
@@ -50,11 +53,14 @@ const PublicGallery = () => {
     const handleLike = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
         
+        analytics.click('like_button', { projectId: id });
+        
         const hasEmail = localStorage.getItem('roomify_captured_email');
         
         if (!hasEmail) {
             setCaptureReason('view_count');
             setShowEmailCapture(true);
+            analytics.dropOff('like_without_email');
             return;
         }
         
@@ -63,13 +69,19 @@ const PublicGallery = () => {
             setProjects(projects.map(p => 
                 p.id === id ? { ...p, likeCount: result.likeCount, isLiked: true } : p
             ));
+            analytics.featureUsed('like_design');
         }
+    };
+
+    const handleDesignClick = (projectId: string, shareToken?: string) => {
+        analytics.click('gallery_design_click', { projectId });
+        navigate(`/visualizer/${projectId}?share=${shareToken}`);
     };
 
     const handleEmailCaptureSuccess = (email: string) => {
         console.log('Email captured:', email);
         setShowEmailCapture(false);
-        // Here you would send to your backend/CRM
+        analytics.conversion('email_captured_from_gallery');
     };
 
     const formatDate = (timestamp: number) => {
@@ -96,7 +108,10 @@ const PublicGallery = () => {
                         type="text"
                         placeholder="Search designs..."
                         value={filter.search || ''}
-                        onChange={(e) => setFilter({ ...filter, search: e.target.value })}
+                        onChange={(e) => {
+                            setFilter({ ...filter, search: e.target.value });
+                            analytics.click('gallery_search');
+                        }}
                     />
                     {filter.search && (
                         <button onClick={() => setFilter({ ...filter, search: undefined })}>
@@ -108,19 +123,28 @@ const PublicGallery = () => {
                 <div className="view-toggle">
                     <button
                         className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`}
-                        onClick={() => setViewMode('grid')}
+                        onClick={() => {
+                            setViewMode('grid');
+                            analytics.click('gallery_view_mode', { mode: 'grid' });
+                        }}
                     >
                         <Grid3X3 size={18} />
                     </button>
                     <button
                         className={`view-btn ${viewMode === 'list' ? 'active' : ''}`}
-                        onClick={() => setViewMode('list')}
+                        onClick={() => {
+                            setViewMode('list');
+                            analytics.click('gallery_view_mode', { mode: 'list' });
+                        }}
                     >
                         <List size={18} />
                     </button>
                 </div>
 
-                <button className="filter-toggle" onClick={() => setShowFilters(!showFilters)}>
+                <button className="filter-toggle" onClick={() => {
+                    setShowFilters(!showFilters);
+                    analytics.click('gallery_filter_toggle');
+                }}>
                     <Filter size={18} />
                     Filters
                 </button>
@@ -133,19 +157,28 @@ const PublicGallery = () => {
                         <div className="filter-buttons">
                             <button
                                 className={filter.sortBy === 'recent' ? 'active' : ''}
-                                onClick={() => setFilter({ ...filter, sortBy: 'recent' })}
+                                onClick={() => {
+                                    setFilter({ ...filter, sortBy: 'recent' });
+                                    analytics.click('gallery_sort', { sortBy: 'recent' });
+                                }}
                             >
                                 Most Recent
                             </button>
                             <button
                                 className={filter.sortBy === 'popular' ? 'active' : ''}
-                                onClick={() => setFilter({ ...filter, sortBy: 'popular' })}
+                                onClick={() => {
+                                    setFilter({ ...filter, sortBy: 'popular' });
+                                    analytics.click('gallery_sort', { sortBy: 'popular' });
+                                }}
                             >
                                 Most Viewed
                             </button>
                             <button
                                 className={filter.sortBy === 'mostLiked' ? 'active' : ''}
-                                onClick={() => setFilter({ ...filter, sortBy: 'mostLiked' })}
+                                onClick={() => {
+                                    setFilter({ ...filter, sortBy: 'mostLiked' });
+                                    analytics.click('gallery_sort', { sortBy: 'mostLiked' });
+                                }}
                             >
                                 Most Liked
                             </button>
@@ -165,7 +198,10 @@ const PublicGallery = () => {
                                 <button
                                     key={style.id}
                                     className={filter.style === style.id ? 'active' : ''}
-                                    onClick={() => setFilter({ ...filter, style: style.id })}
+                                    onClick={() => {
+                                        setFilter({ ...filter, style: style.id });
+                                        analytics.click('gallery_filter_style', { style: style.id });
+                                    }}
                                 >
                                     {style.name}
                                 </button>
@@ -186,7 +222,10 @@ const PublicGallery = () => {
                                 <button
                                     key={preset.id}
                                     className={filter.preset === preset.id ? 'active' : ''}
-                                    onClick={() => setFilter({ ...filter, preset: preset.id })}
+                                    onClick={() => {
+                                        setFilter({ ...filter, preset: preset.id });
+                                        analytics.click('gallery_filter_preset', { preset: preset.id });
+                                    }}
                                 >
                                     {preset.name}
                                 </button>
@@ -213,7 +252,7 @@ const PublicGallery = () => {
                         <div
                             key={project.id}
                             className="gallery-card"
-                            onClick={() => navigate(`/visualizer/${project.id}?share=${project.shareToken}`)}
+                            onClick={() => handleDesignClick(project.id, project.shareToken)}
                         >
                             <div className="card-image">
                                 <img src={project.renderedImage || project.sourceImage} alt={project.name || 'Design'} />
