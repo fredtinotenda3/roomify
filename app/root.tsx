@@ -62,15 +62,28 @@ export default function App() {
     const location = useLocation();
     const [authState, setAuthState] = useState<AuthState>(DEFAULT_AUTH_STATE);
 
-    // Track page views
+    // Initialize analytics and track page views
+    useEffect(() => {
+        // Track initial page view
+        trackPageView(location.pathname);
+        
+        // Log that analytics is active
+        console.log('[Analytics] Tracking initialized');
+        
+        // Test event - remove in production
+        analytics.track('app_initialized', { timestamp: new Date().toISOString() });
+    }, []);
+
+    // Track page views on location change
     useEffect(() => {
         trackPageView(location.pathname);
-    }, [location]);
+    }, [location.pathname]);
 
     // Set user ID in analytics when auth changes
     useEffect(() => {
         if (authState.userId) {
             analytics.setUserId(authState.userId);
+            console.log('[Analytics] User identified:', authState.userId);
         } else {
             analytics.setUserId(null);
         }
@@ -99,15 +112,18 @@ export default function App() {
 
     const signIn = async () => {
         analytics.conversion('sign_in_start');
+        console.log('[Analytics] Sign in started');
         await puterSignIn();
         const result = await refreshAuth();
         if (result) {
             analytics.conversion('sign_in_complete');
+            console.log('[Analytics] Sign in completed');
         }
         return result;
     }
 
     const signOut = async () => {
+        console.log('[Analytics] Sign out');
         puterSignOut();
         return await refreshAuth();
     }
@@ -117,7 +133,10 @@ export default function App() {
         <Outlet
             context={{ ...authState, refreshAuth, signIn, signOut }}
         />
-        <AnalyticsDashboard isAdmin={true} />
+        <AnalyticsDashboard 
+            isAdmin={true} 
+            userId={authState.userId || undefined}
+        />
       </main>
   )
 }

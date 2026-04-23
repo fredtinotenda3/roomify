@@ -1,77 +1,57 @@
 // FILE: C:\Users\user\Desktop\roomify\components\AnalyticsDashboard.tsx
 
 import { useState, useEffect } from 'react';
-import { analytics } from '../lib/analytics';
-import { BarChart3, Eye, MousePointer, Users, TrendingUp, AlertCircle, X } from 'lucide-react';
+import { getAnalyticsStats, getUserAnalytics, type AnalyticsEvent } from '../lib/analytics.storage';
+import { analytics as localAnalytics } from '../lib/analytics';
+import { BarChart3, Eye, MousePointer, Users, TrendingUp, AlertCircle, X, RefreshCw, Download } from 'lucide-react';
 import Button from './ui/Button';
 
 interface AnalyticsDashboardProps {
     isAdmin?: boolean;
+    userId?: string;
 }
 
-const AnalyticsDashboard = ({ isAdmin = false }: AnalyticsDashboardProps) => {
-    const [events, setEvents] = useState<any[]>([]);
-    const [stats, setStats] = useState({
-        pageViews: 0,
-        clicks: 0,
-        features: {} as Record<string, number>,
-        conversions: {} as Record<string, number>,
-        dropOffs: {} as Record<string, number>,
-        errors: 0,
-        uniqueSessions: new Set<string>().size
-    });
+const AnalyticsDashboard = ({ isAdmin = false, userId }: AnalyticsDashboardProps) => {
+    const [events, setEvents] = useState<AnalyticsEvent[]>([]);
+    const [stats, setStats] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
     const [show, setShow] = useState(false);
+    const [activeTab, setActiveTab] = useState<'stats' | 'events'>('stats');
+
+    const loadData = async () => {
+        setLoading(true);
+        
+        if (isAdmin) {
+            // Admin gets global stats
+            const globalStats = await getAnalyticsStats();
+            setStats(globalStats);
+        }
+        
+        // Get user's own events if userId provided (even for admin)
+        if (userId) {
+            const userEvents = await getUserAnalytics(userId);
+            setEvents(userEvents);
+        }
+        
+        setLoading(false);
+    };
 
     useEffect(() => {
-        if (!isAdmin) return;
-        
-        const loadEvents = () => {
-            const allEvents = analytics.getEvents();
-            setEvents(allEvents);
-            
-            // Calculate stats
-            const pageViews = allEvents.filter(e => e.name === 'page_view').length;
-            const clicks = allEvents.filter(e => e.name === 'click').length;
-            const errors = allEvents.filter(e => e.name === 'error').length;
-            
-            const features: Record<string, number> = {};
-            const conversions: Record<string, number> = {};
-            const dropOffs: Record<string, number> = {};
-            
-            allEvents.forEach(event => {
-                if (event.name === 'feature_used' && event.properties?.feature) {
-                    const feature = event.properties.feature as string;
-                    features[feature] = (features[feature] || 0) + 1;
-                }
-                if (event.name === 'conversion' && event.properties?.step) {
-                    const step = event.properties.step as string;
-                    conversions[step] = (conversions[step] || 0) + 1;
-                }
-                if (event.name === 'drop_off' && event.properties?.point) {
-                    const point = event.properties.point as string;
-                    dropOffs[point] = (dropOffs[point] || 0) + 1;
-                }
-            });
-            
-            const uniqueSessions = new Set(allEvents.map(e => e.sessionId)).size;
-            
-            setStats({
-                pageViews,
-                clicks,
-                features,
-                conversions,
-                dropOffs,
-                errors,
-                uniqueSessions
-            });
-        };
-        
-        loadEvents();
-        const interval = setInterval(loadEvents, 5000);
-        return () => clearInterval(interval);
-    }, [isAdmin]);
+        if (show && (isAdmin || userId)) {
+            loadData();
+        }
+    }, [show, isAdmin, userId]);
 
-    if (!isAdmin) return null;
+    const exportEvents = () => {
+        const dataStr = JSON.stringify(events, null, 2);
+        const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+        const exportFileDefaultName = `roomify-analytics-${new Date().toISOString()}.json`;
+        const linkElement = document.createElement('a');
+        linkElement.setAttribute('href', dataUri);
+        linkElement.setAttribute('download', exportFileDefaultName);
+        linkElement.click();
+    };
+
     if (!show) {
         return (
             <button 
@@ -80,6 +60,31 @@ const AnalyticsDashboard = ({ isAdmin = false }: AnalyticsDashboardProps) => {
             >
                 <BarChart3 size={20} />
                 <span>Analytics</span>
+                <style>{`
+                    .analytics-toggle {
+                        position: fixed;
+                        bottom: 20px;
+                        right: 20px;
+                        background: linear-gradient(135deg, #1a1a1a, #2d2d2d);
+                        color: white;
+                        border: none;
+                        border-radius: 50px;
+                        padding: 10px 20px;
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        cursor: pointer;
+                        z-index: 999;
+                        font-size: 14px;
+                        font-weight: 500;
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                        transition: all 0.2s;
+                    }
+                    .analytics-toggle:hover {
+                        transform: scale(1.05);
+                        background: linear-gradient(135deg, #f97316, #ea580c);
+                    }
+                `}</style>
             </button>
         );
     }
@@ -91,140 +96,195 @@ const AnalyticsDashboard = ({ isAdmin = false }: AnalyticsDashboardProps) => {
                     <BarChart3 size={20} />
                     Analytics Dashboard
                 </h3>
-                <button onClick={() => setShow(false)} className="close-analytics">
-                    <X size={18} />
+                <div className="analytics-header-actions">
+                    <button onClick={() => loadData()} className="refresh-btn" title="Refresh">
+                        <RefreshCw size={16} />
+                    </button>
+                    {events.length > 0 && (
+                        <button onClick={exportEvents} className="export-btn" title="Export">
+                            <Download size={16} />
+                        </button>
+                    )}
+                    <button onClick={() => setShow(false)} className="close-analytics">
+                        <X size={18} />
+                    </button>
+                </div>
+            </div>
+
+            <div className="analytics-tabs">
+                <button
+                    className={`tab ${activeTab === 'stats' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('stats')}
+                >
+                    Statistics
+                </button>
+                <button
+                    className={`tab ${activeTab === 'events' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('events')}
+                >
+                    Events ({events.length})
                 </button>
             </div>
 
-            <div className="analytics-stats-grid">
-                <div className="stat-card">
-                    <Eye size={24} />
-                    <div>
-                        <div className="stat-value">{stats.pageViews}</div>
-                        <div className="stat-label">Page Views</div>
-                    </div>
+            {loading ? (
+                <div className="analytics-loading">
+                    <div className="spinner"></div>
+                    <p>Loading analytics...</p>
                 </div>
-                <div className="stat-card">
-                    <MousePointer size={24} />
-                    <div>
-                        <div className="stat-value">{stats.clicks}</div>
-                        <div className="stat-label">Clicks</div>
-                    </div>
-                </div>
-                <div className="stat-card">
-                    <Users size={24} />
-                    <div>
-                        <div className="stat-value">{stats.uniqueSessions}</div>
-                        <div className="stat-label">Unique Sessions</div>
-                    </div>
-                </div>
-                <div className="stat-card">
-                    <AlertCircle size={24} />
-                    <div>
-                        <div className="stat-value">{stats.errors}</div>
-                        <div className="stat-label">Errors</div>
-                    </div>
-                </div>
-            </div>
-
-            <div className="analytics-section">
-                <h4>Feature Usage</h4>
-                <div className="feature-list">
-                    {Object.entries(stats.features).map(([feature, count]) => (
-                        <div key={feature} className="feature-item">
-                            <span>{feature}</span>
-                            <div className="feature-bar">
-                                <div className="feature-fill" style={{ width: `${Math.min(100, (count / Math.max(1, stats.pageViews)) * 100)}%` }} />
+            ) : (
+                <>
+                    {activeTab === 'stats' && stats && (
+                        <>
+                            <div className="analytics-stats-grid">
+                                <div className="stat-card">
+                                    <Eye size={24} />
+                                    <div>
+                                        <div className="stat-value">{stats.totalEvents?.toLocaleString() || 0}</div>
+                                        <div className="stat-label">Total Events</div>
+                                    </div>
+                                </div>
+                                <div className="stat-card">
+                                    <Users size={24} />
+                                    <div>
+                                        <div className="stat-value">{stats.totalUsers?.toLocaleString() || 0}</div>
+                                        <div className="stat-label">Unique Users</div>
+                                    </div>
+                                </div>
+                                <div className="stat-card">
+                                    <MousePointer size={24} />
+                                    <div>
+                                        <div className="stat-value">{stats.totalSessions?.toLocaleString() || 0}</div>
+                                        <div className="stat-label">Total Sessions</div>
+                                    </div>
+                                </div>
+                                <div className="stat-card">
+                                    <TrendingUp size={24} />
+                                    <div>
+                                        <div className="stat-value">
+                                            {stats.usersByPlan?.pro || 0} / {stats.usersByPlan?.free || 0}
+                                        </div>
+                                        <div className="stat-label">Pro / Free Users</div>
+                                    </div>
+                                </div>
                             </div>
-                            <span className="feature-count">{count}</span>
-                        </div>
-                    ))}
-                    {Object.keys(stats.features).length === 0 && (
-                        <p className="no-data">No feature usage data yet</p>
-                    )}
-                </div>
-            </div>
 
-            <div className="analytics-section">
-                <h4>Conversion Funnel</h4>
-                <div className="conversion-funnel">
-                    {Object.entries(stats.conversions).map(([step, count]) => (
-                        <div key={step} className="funnel-step">
-                            <div className="funnel-label">{step}</div>
-                            <div className="funnel-bar">
-                                <div className="funnel-fill" style={{ width: `${Math.min(100, (count / Math.max(1, stats.uniqueSessions)) * 100)}%` }} />
-                            </div>
-                            <div className="funnel-count">{count}</div>
-                        </div>
-                    ))}
-                    {Object.keys(stats.conversions).length === 0 && (
-                        <p className="no-data">No conversion data yet</p>
-                    )}
-                </div>
-            </div>
+                            {stats.eventsByType && Object.keys(stats.eventsByType).length > 0 && (
+                                <div className="analytics-section">
+                                    <h4>Events by Type</h4>
+                                    <div className="events-type-list">
+                                        {Object.entries(stats.eventsByType)
+                                            .sort((a, b) => (b[1] as number) - (a[1] as number))
+                                            .slice(0, 10)
+                                            .map(([type, count]) => (
+                                                <div key={type} className="event-type-item">
+                                                    <span>{type}</span>
+                                                    <div className="event-bar">
+                                                        <div 
+                                                            className="event-fill" 
+                                                            style={{ width: `${Math.min(100, ((count as number) / stats.totalEvents) * 100)}%` }} 
+                                                        />
+                                                    </div>
+                                                    <span className="event-count">{(count as number).toLocaleString()}</span>
+                                                </div>
+                                            ))}
+                                    </div>
+                                </div>
+                            )}
 
-            <div className="analytics-section">
-                <h4>Drop-off Points</h4>
-                <div className="dropoff-list">
-                    {Object.entries(stats.dropOffs).map(([point, count]) => (
-                        <div key={point} className="dropoff-item">
-                            <span>{point}</span>
-                            <span className="dropoff-count">{count}</span>
-                        </div>
-                    ))}
-                    {Object.keys(stats.dropOffs).length === 0 && (
-                        <p className="no-data">No drop-off data yet</p>
-                    )}
-                </div>
-            </div>
+                            {stats.topFeatures && stats.topFeatures.length > 0 && (
+                                <div className="analytics-section">
+                                    <h4>Top Features Used</h4>
+                                    <div className="features-list">
+                                        {stats.topFeatures.map((feature: any, index: number) => (
+                                            <div key={index} className="feature-item">
+                                                <span>{feature.feature}</span>
+                                                <div className="feature-bar">
+                                                    <div 
+                                                        className="feature-fill" 
+                                                        style={{ width: `${Math.min(100, (feature.count / stats.topFeatures[0]?.count) * 100)}%` }} 
+                                                    />
+                                                </div>
+                                                <span className="feature-count">{feature.count.toLocaleString()}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
-            <div className="analytics-actions">
-                <Button size="sm" variant="ghost" onClick={() => analytics.clearEvents()}>
-                    Clear Events
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => window.location.reload()}>
-                    Refresh
-                </Button>
-            </div>
+                            {stats.conversionRates && Object.keys(stats.conversionRates).length > 0 && (
+                                <div className="analytics-section">
+                                    <h4>Conversion Funnel</h4>
+                                    <div className="conversion-funnel">
+                                        {Object.entries(stats.conversionRates).map(([step, count]) => (
+                                            <div key={step} className="funnel-step">
+                                                <div className="funnel-label">{step}</div>
+                                                <div className="funnel-bar">
+                                                    <div 
+                                                        className="funnel-fill" 
+                                                        style={{ width: `${Math.min(100, (count as number) / (stats.totalUsers || 1) * 100)}%` }} 
+                                                    />
+                                                </div>
+                                                <div className="funnel-count">{(count as number).toLocaleString()}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    )}
+
+                    {activeTab === 'events' && (
+                        <div className="analytics-events-list">
+                            {events.length === 0 ? (
+                                <div className="no-events">
+                                    <AlertCircle size={32} />
+                                    <p>No events recorded yet</p>
+                                </div>
+                            ) : (
+                                events.slice().reverse().map((event) => (
+                                    <div key={event.id} className="event-item">
+                                        <div className="event-header">
+                                            <span className="event-name">{event.name}</span>
+                                            <span className="event-time">
+                                                {new Date(event.timestamp).toLocaleString()}
+                                            </span>
+                                        </div>
+                                        {event.properties && Object.keys(event.properties).length > 0 && (
+                                            <div className="event-properties">
+                                                {Object.entries(event.properties).map(([key, value]) => (
+                                                    <span key={key} className="event-prop">
+                                                        {key}: {JSON.stringify(value)}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {event.path && (
+                                            <div className="event-path">Path: {event.path}</div>
+                                        )}
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    )}
+                </>
+            )}
 
             <style>{`
-                .analytics-toggle {
-                    position: fixed;
-                    bottom: 20px;
-                    right: 20px;
-                    background: linear-gradient(135deg, #1a1a1a, #2d2d2d);
-                    color: white;
-                    border: none;
-                    border-radius: 50px;
-                    padding: 10px 20px;
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                    cursor: pointer;
-                    z-index: 999;
-                    font-size: 14px;
-                    font-weight: 500;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                    transition: all 0.2s;
-                }
-
-                .analytics-toggle:hover {
-                    transform: scale(1.05);
-                    background: linear-gradient(135deg, #f97316, #ea580c);
-                }
-
                 .analytics-dashboard {
                     position: fixed;
                     bottom: 80px;
                     right: 20px;
-                    width: 400px;
+                    width: 500px;
                     max-width: calc(100vw - 40px);
+                    max-height: 70vh;
                     background: white;
                     border-radius: 16px;
                     box-shadow: 0 20px 40px rgba(0,0,0,0.2);
                     z-index: 1000;
                     overflow: hidden;
                     animation: slideUp 0.3s ease;
+                    display: flex;
+                    flex-direction: column;
                 }
 
                 @keyframes slideUp {
@@ -245,6 +305,7 @@ const AnalyticsDashboard = ({ isAdmin = false }: AnalyticsDashboardProps) => {
                     padding: 16px;
                     background: linear-gradient(135deg, #1a1a1a, #2d2d2d);
                     color: white;
+                    flex-shrink: 0;
                 }
 
                 .analytics-header h3 {
@@ -255,12 +316,73 @@ const AnalyticsDashboard = ({ isAdmin = false }: AnalyticsDashboardProps) => {
                     font-size: 16px;
                 }
 
-                .close-analytics {
+                .analytics-header-actions {
+                    display: flex;
+                    gap: 8px;
+                    align-items: center;
+                }
+
+                .refresh-btn, .export-btn, .close-analytics {
                     background: none;
                     border: none;
                     color: white;
                     cursor: pointer;
                     padding: 4px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    border-radius: 4px;
+                    transition: background 0.2s;
+                }
+
+                .refresh-btn:hover, .export-btn:hover, .close-analytics:hover {
+                    background: rgba(255,255,255,0.1);
+                }
+
+                .analytics-tabs {
+                    display: flex;
+                    border-bottom: 1px solid #e5e7eb;
+                    background: #f9fafb;
+                    flex-shrink: 0;
+                }
+
+                .tab {
+                    flex: 1;
+                    padding: 10px;
+                    background: none;
+                    border: none;
+                    cursor: pointer;
+                    font-size: 14px;
+                    font-weight: 500;
+                    color: #6b7280;
+                    transition: all 0.2s;
+                }
+
+                .tab.active {
+                    color: #f97316;
+                    border-bottom: 2px solid #f97316;
+                }
+
+                .analytics-loading {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 40px;
+                    gap: 12px;
+                }
+
+                .spinner {
+                    width: 32px;
+                    height: 32px;
+                    border: 3px solid #f3f4f6;
+                    border-top-color: #f97316;
+                    border-radius: 50%;
+                    animation: spin 0.6s linear infinite;
+                }
+
+                @keyframes spin {
+                    to { transform: rotate(360deg); }
                 }
 
                 .analytics-stats-grid {
@@ -269,6 +391,7 @@ const AnalyticsDashboard = ({ isAdmin = false }: AnalyticsDashboardProps) => {
                     gap: 12px;
                     padding: 16px;
                     background: #f9fafb;
+                    flex-shrink: 0;
                 }
 
                 .stat-card {
@@ -286,102 +409,126 @@ const AnalyticsDashboard = ({ isAdmin = false }: AnalyticsDashboardProps) => {
                 }
 
                 .stat-value {
-                    font-size: 24px;
+                    font-size: 20px;
                     font-weight: bold;
                     color: #1a1a1a;
                 }
 
                 .stat-label {
-                    font-size: 12px;
+                    font-size: 11px;
                     color: #6b7280;
                 }
 
                 .analytics-section {
                     padding: 16px;
                     border-top: 1px solid #e5e7eb;
+                    overflow-y: auto;
+                    flex-shrink: 0;
                 }
 
                 .analytics-section h4 {
                     margin: 0 0 12px 0;
-                    font-size: 14px;
+                    font-size: 13px;
                     font-weight: 600;
                 }
 
-                .feature-list, .dropoff-list {
+                .events-type-list, .features-list, .conversion-funnel {
                     display: flex;
                     flex-direction: column;
                     gap: 8px;
                 }
 
-                .feature-item, .dropoff-item {
+                .event-type-item, .feature-item, .funnel-step {
                     display: flex;
                     align-items: center;
                     gap: 12px;
-                    font-size: 13px;
+                    font-size: 12px;
                 }
 
-                .feature-item span:first-child, .dropoff-item span:first-child {
+                .event-type-item span:first-child, .feature-item span:first-child, .funnel-label {
                     width: 100px;
                     color: #4b5563;
+                    font-size: 12px;
                 }
 
-                .feature-bar, .funnel-bar {
+                .event-bar, .feature-bar, .funnel-bar {
                     flex: 1;
-                    height: 8px;
+                    height: 6px;
                     background: #e5e7eb;
-                    border-radius: 4px;
+                    border-radius: 3px;
                     overflow: hidden;
                 }
 
-                .feature-fill, .funnel-fill {
+                .event-fill, .feature-fill, .funnel-fill {
                     height: 100%;
                     background: linear-gradient(90deg, #f97316, #ea580c);
-                    border-radius: 4px;
+                    border-radius: 3px;
                     transition: width 0.3s;
                 }
 
-                .feature-count, .funnel-count {
-                    width: 40px;
+                .event-count, .feature-count, .funnel-count {
+                    width: 60px;
                     text-align: right;
                     color: #6b7280;
+                    font-size: 12px;
                 }
 
-                .dropoff-count {
-                    color: #ef4444;
+                .analytics-events-list {
+                    overflow-y: auto;
+                    flex: 1;
+                    padding: 12px;
+                }
+
+                .event-item {
+                    padding: 10px;
+                    border-bottom: 1px solid #f3f4f6;
+                    font-size: 12px;
+                }
+
+                .event-header {
+                    display: flex;
+                    justify-content: space-between;
+                    margin-bottom: 6px;
+                }
+
+                .event-name {
                     font-weight: 600;
+                    color: #1a1a1a;
                 }
 
-                .conversion-funnel {
+                .event-time {
+                    color: #9ca3af;
+                    font-size: 10px;
+                }
+
+                .event-properties {
                     display: flex;
-                    flex-direction: column;
-                    gap: 12px;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                    margin-bottom: 4px;
                 }
 
-                .funnel-step {
-                    display: flex;
-                    align-items: center;
-                    gap: 12px;
-                }
-
-                .funnel-label {
-                    width: 100px;
-                    font-size: 13px;
+                .event-prop {
+                    background: #f3f4f6;
+                    padding: 2px 6px;
+                    border-radius: 4px;
+                    font-size: 10px;
                     color: #4b5563;
                 }
 
-                .no-data {
-                    text-align: center;
+                .event-path {
                     color: #9ca3af;
-                    font-size: 13px;
-                    padding: 20px;
+                    font-size: 10px;
                 }
 
-                .analytics-actions {
-                    display: flex;
-                    gap: 8px;
-                    padding: 12px 16px;
-                    border-top: 1px solid #e5e7eb;
-                    background: #f9fafb;
+                .no-events {
+                    text-align: center;
+                    padding: 40px;
+                    color: #9ca3af;
+                }
+
+                .no-events svg {
+                    margin-bottom: 12px;
                 }
             `}</style>
         </div>
