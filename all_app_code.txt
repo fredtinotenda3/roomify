@@ -1,0 +1,2530 @@
+﻿
+==== FILE: C:\Users\user\Desktop\roomify\app\app.css ====
+
+@import "tailwindcss";
+
+@theme {
+    --color-background: #fdfbf7;
+    --color-foreground: #1a1a1a;
+    --color-surface: #ffffff;
+    --color-surface-highlight: #f3f4f6;
+    --color-primary: #f97316;
+    --color-secondary: #3b82f6;
+    --color-accent: #8b5cf6;
+    --font-serif: "Instrument Serif", serif;
+    --font-sans: Inter, sans-serif;
+    --shadow-neobrutalism: 4px 4px 0px 0px rgba(0, 0, 0, 1);
+}
+
+@layer base {
+    html {
+        scroll-behavior: smooth;
+    }
+
+    body {
+        background-color: #fdfbf7;
+        color: #1a1a1a;
+        font-family: Inter, sans-serif;
+        -webkit-font-smoothing: antialiased;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+        font-family: "Instrument Serif", serif;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: #fdfbf7;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: #d1d5db;
+        border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: #9ca3af;
+    }
+}
+
+@layer components {
+    .btn {
+        @apply inline-flex items-center justify-center rounded-lg font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed;
+
+        &.btn--primary {
+            @apply bg-primary text-white hover:bg-[#EA580C] shadow-sm;
+        }
+
+        &.btn--secondary {
+            @apply bg-white text-black border border-zinc-200 hover:bg-zinc-50 shadow-sm;
+        }
+
+        &.btn--ghost {
+            @apply text-zinc-600 hover:text-black hover:bg-black/5;
+        }
+
+        &.btn--outline {
+            @apply bg-transparent border border-zinc-300 text-zinc-900 hover:bg-zinc-100;
+        }
+
+        &.btn--sm {
+            @apply px-3 py-1.5 text-xs uppercase tracking-wide;
+        }
+
+        &.btn--md {
+            @apply px-5 py-2.5 text-sm;
+        }
+
+        &.btn--lg {
+            @apply px-8 py-3 text-sm uppercase tracking-wide font-bold;
+        }
+
+        &.btn--full {
+            @apply w-full;
+        }
+    }
+
+    .card {
+        @apply bg-surface border border-white/5 rounded-3xl p-6 shadow-xl;
+
+        .header {
+            @apply flex justify-between items-center mb-4;
+
+            h3 {
+                @apply text-lg font-semibold text-zinc-100;
+            }
+        }
+    }
+
+    .navbar {
+        @apply fixed top-0 w-full z-50 bg-background/90 backdrop-blur-sm border-b border-black/5;
+
+        .inner {
+            @apply max-w-7xl mx-auto px-6 h-16 flex items-center justify-between;
+
+            .left {
+                @apply flex items-center space-x-8;
+
+                .brand {
+                    @apply flex items-center space-x-2 cursor-pointer;
+
+                    .logo {
+                        @apply w-6 h-6 text-black;
+                    }
+
+                    .name {
+                        @apply text-xl font-serif font-bold text-black tracking-tight;
+                    }
+                }
+
+                .links {
+                    @apply hidden md:flex items-center space-x-6;
+
+                    a {
+                        @apply text-sm font-medium text-zinc-600 hover:text-black transition-colors;
+                    }
+                }
+            }
+
+            .actions {
+                @apply flex items-center space-x-4;
+
+                .greeting {
+                    @apply text-xs font-semibold uppercase tracking-wide text-zinc-500;
+                }
+
+                .btn {
+                    @apply rounded-md;
+                }
+
+                .login {
+                    @apply text-xs font-bold uppercase tracking-wide text-zinc-900 hover:text-primary transition-colors;
+                }
+
+                .cta {
+                    @apply inline-flex items-center justify-center rounded-md font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1.5 text-xs uppercase tracking-wide bg-primary text-white hover:bg-[#EA580C] shadow-sm;
+                }
+            }
+        }
+    }
+
+    .auth-modal {
+        @apply absolute inset-0 z-60 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4;
+
+        .panel {
+            @apply bg-white rounded-xl shadow-2xl max-w-md w-full p-6 text-center border border-zinc-200;
+
+            .icon {
+                @apply w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4;
+
+                .alert {
+                    @apply text-primary w-6 h-6;
+                }
+            }
+
+            h3 {
+                @apply text-xl font-serif font-bold text-black mb-2;
+            }
+
+            p {
+                @apply text-zinc-600 text-sm mb-6 leading-relaxed;
+            }
+
+            .actions {
+                @apply flex flex-col space-y-3;
+
+                .confirm {
+                    @apply bg-primary hover:bg-orange-600 text-white;
+                }
+
+                .cancel {
+                    @apply text-xs text-zinc-400 hover:text-black mt-2;
+                }
+            }
+        }
+    }
+
+    .upload {
+        @apply w-full;
+
+        .dropzone {
+            @apply relative h-48 rounded-xl border-2 border-dashed transition-all duration-300 flex flex-col items-center justify-center cursor-pointer bg-zinc-50 border-zinc-200 hover:border-zinc-300 hover:bg-zinc-100;
+
+            &.is-dragging {
+                @apply border-primary bg-orange-50;
+
+                .drop-icon {
+                    @apply bg-orange-100 text-primary;
+                }
+            }
+
+            .drop-input {
+                @apply absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10;
+            }
+
+            .drop-content {
+                @apply flex flex-col items-center pointer-events-none;
+
+                .drop-icon {
+                    @apply w-12 h-12 rounded-full flex items-center justify-center mb-4 transition-colors bg-zinc-200 text-zinc-500;
+                }
+
+                p {
+                    @apply text-zinc-900 font-bold text-sm mb-1;
+                }
+
+                .help {
+                    @apply text-zinc-500 text-xs;
+                }
+            }
+
+            &:not(.is-dragging):hover .drop-icon {
+                @apply bg-zinc-300 text-black;
+            }
+        }
+
+        .upload-status {
+            @apply h-48 rounded-xl border border-zinc-200 bg-white p-6 flex flex-col justify-center relative overflow-hidden;
+
+            .status-content {
+                @apply relative z-10 flex flex-col items-center justify-center text-center;
+
+                .status-icon {
+                    @apply w-12 h-12 rounded-lg bg-zinc-100 flex items-center justify-center text-black mb-3 border border-zinc-200;
+
+                    .check {
+                        @apply text-green-500;
+                    }
+                }
+
+                h3 {
+                    @apply text-black font-bold text-sm truncate max-w-full px-4;
+                }
+
+                .progress {
+                    @apply w-full max-w-50 h-1.5 bg-zinc-100 rounded-full mt-3 overflow-hidden;
+
+                    .bar {
+                        @apply h-full bg-primary transition-all duration-300 ease-out;
+                    }
+                }
+
+                .status-text {
+                    @apply text-zinc-500 text-xs font-mono uppercase mt-2;
+                }
+            }
+        }
+    }
+
+    .visualizer {
+        @apply min-h-screen bg-background pt-6 pb-10 px-4 md:px-6 flex flex-col items-center font-sans relative;
+
+        .topbar {
+            @apply w-full max-w-6xl flex items-center justify-between mb-6 px-2;
+
+            .brand {
+                @apply flex items-center space-x-2 cursor-pointer;
+
+                .logo {
+                    @apply w-6 h-6 text-black;
+                }
+
+                .name {
+                    @apply text-xl font-serif font-bold text-black tracking-tight;
+                }
+            }
+
+            .exit {
+                @apply text-zinc-500 hover:text-black hover:bg-zinc-100;
+
+                .icon {
+                    @apply w-5 h-5 mr-2;
+                }
+            }
+        }
+
+        .content {
+            @apply w-full max-w-6xl grid grid-cols-1 gap-6;
+        }
+
+        .panel {
+            @apply bg-white rounded-xl border border-zinc-200 shadow-2xl overflow-hidden;
+
+            .panel-header {
+                @apply flex flex-col md:flex-row md:items-center md:justify-between gap-4 p-5 border-b border-zinc-100;
+
+                .panel-meta {
+                    p {
+                        @apply text-xs font-mono uppercase tracking-widest text-zinc-400;
+                    }
+
+                    h2 {
+                        @apply text-2xl font-serif font-bold text-black;
+                    }
+
+                    h3 {
+                        @apply text-lg font-serif font-bold text-black;
+                    }
+
+                    .note {
+                        @apply text-xs text-zinc-500 mt-1;
+                    }
+                }
+
+                .panel-actions {
+                    @apply flex flex-wrap items-center gap-3;
+
+                    .export {
+                        @apply bg-primary text-white hover:bg-orange-600 h-9 border-none shadow-sm;
+                    }
+
+                    .share {
+                        @apply bg-black text-white h-9 shadow-sm hover:bg-zinc-800;
+                    }
+                }
+            }
+
+            .render-area {
+                @apply relative bg-zinc-100 min-h-105;
+
+                .render-img {
+                    @apply w-full h-full object-contain transition-all duration-700 opacity-100 scale-100;
+                }
+
+                &.is-processing {
+                    .render-img {
+                        @apply opacity-50 blur-sm scale-105;
+                    }
+                }
+
+                .render-placeholder {
+                    @apply w-full h-full flex items-center justify-center;
+                }
+
+                .render-fallback {
+                    @apply w-full h-full object-contain opacity-50;
+                }
+
+                .render-overlay {
+                    @apply absolute inset-0 flex flex-col items-center justify-center z-30 bg-white/60 backdrop-blur-sm transition-opacity duration-300;
+
+                    .rendering-card {
+                        @apply bg-white px-6 py-4 rounded-xl border border-zinc-200 flex flex-col items-center shadow-2xl;
+
+                        .spinner {
+                            @apply w-8 h-8 mb-3 animate-spin text-primary;
+                        }
+
+                        .title {
+                            @apply text-sm font-bold text-black;
+                        }
+
+                        .subtitle {
+                            @apply text-xs text-zinc-500 mt-1;
+                        }
+                    }
+                }
+            }
+
+            &.compare {
+                @apply shadow-xl;
+
+                .panel-header {
+                    @apply flex items-center justify-between;
+
+                    .hint {
+                        @apply text-xs text-zinc-400;
+                    }
+                }
+
+                .compare-stage {
+                    @apply relative bg-zinc-100 overflow-hidden;
+                }
+
+                .compare-fallback {
+                    @apply flex items-center justify-center;
+                }
+
+                .compare-img {
+                    @apply w-full h-auto object-contain;
+                }
+            }
+        }
+    }
+
+    .home {
+        @apply min-h-screen bg-background relative overflow-x-hidden text-foreground;
+
+        .hero {
+            @apply pt-32 pb-20 px-6 max-w-7xl mx-auto flex flex-col items-center text-center;
+
+            .announce {
+                @apply mb-8 inline-flex items-center px-3 py-1 rounded-md bg-white border border-zinc-200 shadow-sm;
+
+                .dot {
+                    @apply w-4 h-4 rounded bg-blue-100 flex items-center justify-center mr-2;
+
+                    .pulse {
+                        @apply w-2 h-2 rounded-full bg-blue-500 animate-pulse;
+                    }
+                }
+
+                p {
+                    @apply text-[10px] font-bold uppercase tracking-widest text-zinc-600;
+                }
+            }
+
+            h1 {
+                @apply text-6xl md:text-8xl font-serif leading-[0.95] text-black mb-8 max-w-5xl mx-auto;
+            }
+
+            .subtitle {
+                @apply max-w-2xl mx-auto text-xs md:text-sm font-mono uppercase tracking-widest text-zinc-500 mb-10 leading-relaxed;
+            }
+
+            .actions {
+                @apply flex flex-col sm:flex-row gap-4 justify-center mb-16;
+
+                .cta {
+                    @apply inline-flex items-center justify-center rounded-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background px-8 py-3 text-sm uppercase tracking-wide font-bold bg-primary text-white hover:bg-[#ea580c] shadow-md;
+
+                    .icon {
+                        @apply ml-2 w-4 h-4;
+                    }
+                }
+
+                .demo {
+                    @apply px-8 bg-white rounded-md hover:bg-zinc-50;
+                }
+            }
+
+            .upload-shell {
+                @apply w-full max-w-5xl mx-auto relative rounded-3xl overflow-hidden bg-linear-to-b from-blue-100/50 to-white/50 border border-blue-100 p-6 md:p-12 shadow-sm min-h-100 flex items-center justify-center;
+
+                .grid-overlay {
+                    @apply absolute inset-0 opacity-40 pointer-events-none;
+
+                    background-image:
+                            linear-gradient(#3b82f6 1px, transparent 1px),
+                            linear-gradient(90deg, #3b82f6 1px, transparent 1px);
+
+                    background-size: 60px 60px;
+                }
+
+                .upload-card {
+                    @apply relative w-full max-w-xl bg-white rounded-2xl shadow-xl overflow-hidden border border-zinc-100 p-8 z-10 transition-transform hover:scale-[1.01] duration-500;
+
+                    .upload-head {
+                        @apply text-center mb-6;
+
+                        .upload-icon {
+                            @apply w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3;
+
+                            .icon {
+                                @apply text-orange-500 w-6 h-6;
+                            }
+                        }
+
+                        h3 {
+                            @apply text-xl font-serif font-bold text-black;
+                        }
+
+                        p {
+                            @apply text-zinc-500 text-sm mt-1;
+                        }
+                    }
+                }
+            }
+        }
+
+        .projects {
+            @apply py-24 bg-white relative border-b border-zinc-100;
+
+            .section-inner {
+                @apply max-w-7xl mx-auto px-6;
+
+                .section-head {
+                    @apply flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6;
+
+                    .copy {
+                        @apply max-w-2xl;
+
+                        h2 {
+                            @apply text-4xl font-serif text-black mb-4;
+                        }
+
+                        p {
+                            @apply text-zinc-500 text-lg;
+                        }
+                    }
+                }
+
+                .loading {
+                    @apply flex items-center justify-center text-sm text-zinc-500;
+                }
+
+                .projects-grid {
+                    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8;
+
+                    .project-card {
+                        @apply relative bg-white rounded-xl overflow-hidden border border-zinc-200 shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col h-full;
+
+                        .preview {
+                            @apply aspect-4/3 overflow-hidden bg-zinc-100 relative;
+
+                            img {
+                                @apply w-full h-full object-cover group-hover:scale-105 transition-transform duration-700;
+                            }
+
+                            .badge {
+                                @apply absolute top-3 left-3 bg-white/90 backdrop-blur-md px-2 py-1 rounded-md border border-zinc-200 shadow-sm;
+
+                                span {
+                                    @apply text-[10px] font-bold uppercase tracking-wider text-zinc-800;
+                                }
+                            }
+                        }
+
+                        .card-body {
+                            @apply p-5 flex justify-between items-center bg-white border-t border-zinc-100 grow;
+
+                            h3 {
+                                @apply text-lg font-serif font-bold text-zinc-900 group-hover:text-primary transition-colors;
+                            }
+
+                            .meta {
+                                @apply flex items-center text-zinc-400 text-xs mt-1 space-x-2;
+
+                                span {
+                                    @apply font-mono uppercase;
+                                }
+
+                                span:last-child {
+                                    @apply text-zinc-400 text-[10px] uppercase tracking-wide;
+                                }
+                            }
+
+                            .arrow {
+                                @apply w-10 h-10 rounded-full bg-zinc-50 border border-zinc-200 flex items-center justify-center text-zinc-400 group-hover:bg-primary group-hover:text-white group-hover:border-primary transition-all duration-300;
+                            }
+                        }
+                    }
+
+                    .empty {
+                        @apply col-span-full rounded-xl border border-dashed border-zinc-200 bg-zinc-50 p-10 text-center text-sm text-zinc-500;
+                    }
+                }
+            }
+        }
+
+        .partners {
+            @apply border-t border-zinc-200 py-12 bg-white;
+
+            .section-inner {
+                @apply max-w-7xl mx-auto px-6;
+
+                .logos {
+                    @apply grid grid-cols-2 md:grid-cols-5 gap-8 items-center opacity-60 grayscale hover:grayscale-0 transition-all duration-500;
+                }
+
+                .logo-item {
+                    @apply flex items-center justify-center space-x-2 cursor-pointer;
+
+                    div {
+                        @apply text-zinc-800 group-hover:text-black transition-colors;
+                    }
+
+                    span {
+                        @apply font-bold text-xl text-zinc-800 group-hover:text-black transition-colors tracking-tight;
+                    }
+                }
+            }
+        }
+    }
+
+    .visualizer-route {
+        @apply min-h-screen flex items-center justify-center;
+
+        &.loading {
+            @apply text-sm text-zinc-500;
+        }
+    }
+}
+
+
+
+@layer components {
+    /* Style Selector Component Styles */
+    .style-selector {
+        @apply w-full mb-6;
+    }
+
+    .style-selector-header {
+        @apply mb-4 text-center;
+    }
+
+    .header-content {
+        @apply flex flex-col items-center gap-2;
+    }
+
+    .sparkle-icon {
+        @apply w-6 h-6 text-primary;
+    }
+
+    .style-selector-header h3 {
+        @apply text-lg font-semibold text-foreground m-0;
+    }
+
+    .style-hint {
+        @apply text-xs text-zinc-500 m-0;
+    }
+
+    .style-grid {
+        @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3;
+    }
+
+    .style-card {
+        @apply relative flex items-center gap-3 p-3 bg-white border-2 border-zinc-200 rounded-xl cursor-pointer transition-all duration-200 text-left w-full;
+    }
+
+    .style-card:hover:not(.disabled) {
+        @apply border-primary bg-orange-50 transform -translate-y-0.5 shadow-md;
+    }
+
+    .style-card.selected {
+        @apply border-primary bg-orange-50 shadow-lg ring-2 ring-primary/20;
+    }
+
+    .style-card.disabled {
+        @apply opacity-50 cursor-not-allowed;
+    }
+
+    .style-icon {
+        @apply flex-shrink-0 w-10 h-10 flex items-center justify-center bg-zinc-100 rounded-lg transition-all duration-200;
+    }
+
+    .style-card:hover:not(.disabled) .style-icon {
+        @apply bg-primary scale-105;
+    }
+
+    .style-emoji {
+        @apply text-2xl;
+    }
+
+    .style-info {
+        @apply flex-1;
+    }
+
+    .style-info h4 {
+        @apply text-sm font-semibold text-foreground m-0 mb-1;
+    }
+
+    .style-description {
+        @apply text-xs text-zinc-500 m-0 leading-tight;
+    }
+
+    .selected-badge {
+        @apply absolute -top-2 -right-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center text-white border-2 border-white;
+    }
+
+    .hover-overlay {
+        @apply absolute inset-0 bg-primary/90 rounded-xl flex items-center justify-center text-white text-xs font-semibold backdrop-blur-sm;
+    }
+
+    /* Style section in visualizer */
+    .style-section {
+        @apply px-6 py-4 border-b border-zinc-100 bg-zinc-50/50;
+    }
+
+    /* Responsive adjustments for style selector */
+    @media (max-width: 1024px) {
+        .style-grid {
+            @apply grid-cols-1 sm:grid-cols-2 gap-3;
+        }
+        
+        .style-card {
+            @apply p-2.5;
+        }
+        
+        .style-icon {
+            @apply w-8 h-8;
+        }
+        
+        .style-emoji {
+            @apply text-xl;
+        }
+        
+        .style-info h4 {
+            @apply text-xs;
+        }
+        
+        .style-description {
+            @apply text-[11px];
+        }
+    }
+
+    @media (max-width: 640px) {
+        .style-section {
+            @apply px-4 py-3;
+        }
+        
+        .style-grid {
+            @apply grid-cols-1;
+        }
+    }
+
+    /* Loading states for style generation */
+    .render-area.is-processing {
+        @apply relative;
+    }
+
+    .render-area.is-processing .render-img {
+        @apply opacity-50 blur-sm scale-105 transition-all duration-300;
+    }
+
+    .render-overlay {
+        @apply absolute inset-0 flex flex-col items-center justify-center z-30 bg-white/80 backdrop-blur-md transition-all duration-300;
+    }
+
+    .rendering-card {
+        @apply bg-white px-6 py-4 rounded-xl border border-zinc-200 flex flex-col items-center shadow-xl;
+    }
+
+    .rendering-card .spinner {
+        @apply w-8 h-8 mb-3 animate-spin text-primary;
+    }
+
+    .rendering-card .title {
+        @apply text-sm font-bold text-foreground;
+    }
+
+    .rendering-card .subtitle {
+        @apply text-xs text-zinc-500 mt-1;
+    }
+
+    /* Panel header enhancements for style info */
+    .panel-meta .note {
+        @apply text-xs text-zinc-500 mt-1 flex items-center gap-1;
+    }
+
+    /* Style badge in project cards */
+    .project-card .style-badge {
+        @apply absolute bottom-3 right-3 bg-white/90 backdrop-blur-md px-2 py-1 rounded-md border border-zinc-200 shadow-sm text-[10px] font-medium text-zinc-700;
+    }
+
+    /* Animation for style switching */
+    .render-img {
+        @apply transition-all duration-500 ease-in-out;
+    }
+
+    /* Style selector loading skeleton */
+    .style-skeleton {
+        @apply animate-pulse;
+    }
+
+    .style-skeleton .style-card {
+        @apply bg-zinc-100 border-zinc-200;
+    }
+
+    /* Tooltip for style info */
+    .style-tooltip {
+        @apply invisible absolute z-50 bg-foreground text-background text-xs rounded-lg px-2 py-1 whitespace-nowrap -top-8 left-1/2 transform -translate-x-1/2 transition-all duration-200;
+    }
+
+    .style-card:hover .style-tooltip {
+        @apply visible;
+    }
+
+    /* Generation progress indicator */
+    .generation-progress {
+        @apply w-full max-w-md mt-4;
+    }
+
+    .progress-bar {
+        @apply w-full h-1.5 bg-zinc-200 rounded-full overflow-hidden;
+    }
+
+    .progress-fill {
+        @apply h-full bg-primary transition-all duration-300 ease-out;
+    }
+
+    /* Style variation buttons */
+    .style-variations {
+        @apply flex flex-wrap gap-2 mt-4;
+    }
+
+    .style-variation-btn {
+        @apply px-3 py-1.5 text-xs rounded-lg border border-zinc-200 bg-white text-zinc-700 transition-all duration-200 hover:border-primary hover:text-primary hover:bg-orange-50;
+    }
+
+    .style-variation-btn.active {
+        @apply border-primary bg-primary text-white hover:bg-primary/90;
+    }
+
+    /* Success state for style generation */
+    .style-success {
+        @apply absolute inset-0 flex items-center justify-center bg-green-500/10 backdrop-blur-sm rounded-xl transition-all duration-300;
+    }
+
+    .success-check {
+        @apply w-12 h-12 text-green-500 animate-bounce;
+    }
+}
+
+/* Additional animations */
+@keyframes stylePulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.05);
+        opacity: 0.8;
+    }
+}
+
+.style-card.generating {
+    animation: stylePulse 1.5s ease-in-out infinite;
+}
+
+/* Dark mode support (if needed) */
+@media (prefers-color-scheme: dark) {
+    .style-card {
+        @apply bg-zinc-900 border-zinc-700;
+    }
+    
+    .style-card:hover:not(.disabled) {
+        @apply bg-orange-900/20;
+    }
+    
+    .style-icon {
+        @apply bg-zinc-800;
+    }
+    
+    .style-info h4 {
+        @apply text-zinc-100;
+    }
+    
+    .rendering-card {
+        @apply bg-zinc-900 border-zinc-700;
+    }
+    
+    .style-section {
+        @apply bg-zinc-900/50 border-zinc-800;
+    }
+}
+
+==== FILE: C:\Users\user\Desktop\roomify\app\root.tsx ====
+
+// FILE: C:\Users\user\Desktop\roomify\app\root.tsx
+
+import {
+  isRouteErrorResponse,
+  Links,
+  Meta,
+  Outlet,
+  Scripts,
+  ScrollRestoration,
+  useLocation,
+} from "react-router";
+
+import type { Route } from "./+types/root";
+import "./app.css";
+import {useEffect, useState} from "react";
+import {
+    getCurrentUser,
+    signIn as puterSignIn,
+    signOut as puterSignOut,
+} from "../lib/puter.action";
+import { analytics, trackPageView } from "../lib/analytics";
+import AnalyticsDashboard from "../components/AnalyticsDashboard";
+
+export const links: Route.LinksFunction = () => [
+  { rel: "preconnect", href: "https://fonts.googleapis.com" },
+  {
+    rel: "preconnect",
+    href: "https://fonts.gstatic.com",
+    crossOrigin: "anonymous",
+  },
+  {
+    rel: "stylesheet",
+    href: "https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap",
+  },
+];
+
+export function Layout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <head>
+        <meta charSet="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <Meta />
+        <Links />
+      </head>
+      <body>
+        {children}
+        <ScrollRestoration />
+        <Scripts />
+      </body>
+    </html>
+  );
+}
+
+const DEFAULT_AUTH_STATE: AuthState = {
+    isSignedIn: false,
+    userName: null,
+    userId: null,
+}
+
+export default function App() {
+    const location = useLocation();
+    const [authState, setAuthState] = useState<AuthState>(DEFAULT_AUTH_STATE);
+
+    // Track page views
+    useEffect(() => {
+        trackPageView(location.pathname);
+    }, [location]);
+
+    // Set user ID in analytics when auth changes
+    useEffect(() => {
+        if (authState.userId) {
+            analytics.setUserId(authState.userId);
+        } else {
+            analytics.setUserId(null);
+        }
+    }, [authState.userId]);
+
+    const refreshAuth = async () => {
+        try {
+            const user = await getCurrentUser();
+
+            setAuthState({
+                isSignedIn: !!user,
+                userName: user?.username || null,
+                userId: user?.uuid || null,
+            });
+
+            return !!user;
+        } catch {
+            setAuthState(DEFAULT_AUTH_STATE);
+            return false;
+        }
+    }
+
+    useEffect(() => {
+        refreshAuth()
+    }, []);
+
+    const signIn = async () => {
+        analytics.conversion('sign_in_start');
+        await puterSignIn();
+        const result = await refreshAuth();
+        if (result) {
+            analytics.conversion('sign_in_complete');
+        }
+        return result;
+    }
+
+    const signOut = async () => {
+        puterSignOut();
+        return await refreshAuth();
+    }
+
+  return (
+      <main className="min-h-screen bg-background text-foreground relative z-10">
+        <Outlet
+            context={{ ...authState, refreshAuth, signIn, signOut }}
+        />
+        <AnalyticsDashboard isAdmin={true} />
+      </main>
+  )
+}
+
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  let message = "Oops!";
+  let details = "An unexpected error occurred.";
+  let stack: string | undefined;
+
+  // Track error in analytics
+  useEffect(() => {
+    analytics.error(error instanceof Error ? error.message : 'Unknown error');
+  }, [error]);
+
+  if (isRouteErrorResponse(error)) {
+    message = error.status === 404 ? "404" : "Error";
+    details =
+      error.status === 404
+        ? "The requested page could not be found."
+        : error.statusText || details;
+  } else if (import.meta.env.DEV && error && error instanceof Error) {
+    details = error.message;
+    stack = error.stack;
+  }
+
+  return (
+    <main className="pt-16 p-4 container mx-auto">
+      <h1>{message}</h1>
+      <p>{details}</p>
+      {stack && (
+        <pre className="w-full p-4 overflow-x-auto">
+          <code>{stack}</code>
+        </pre>
+      )}
+    </main>
+  );
+}
+
+==== FILE: C:\Users\user\Desktop\roomify\app\routes.ts ====
+
+// FILE: C:\Users\user\Desktop\roomify\app\routes.ts
+
+import { type RouteConfig, index, route } from "@react-router/dev/routes";
+
+export default [
+    index("routes/home.tsx"),
+    route("visualizer/:id", "routes/visualizer.$id.tsx"),
+    route("gallery", "routes/gallery.tsx"),
+    route("payment-success", "routes/payment-success.tsx"),
+    route("payment-cancel", "routes/payment-cancel.tsx"),
+] satisfies RouteConfig;
+
+==== FILE: C:\Users\user\Desktop\roomify\app\routes\gallery.tsx ====
+
+// FILE: C:\Users\user\Desktop\roomify\app\routes\gallery.tsx
+
+import Navbar from "../../components/Navbar";
+import PublicGallery from "../../components/PublicGallery";
+
+export function meta() {
+  return [
+    { title: "Community Gallery - Roomify" },
+    { name: "description", content: "Explore stunning architectural designs created by the Roomify community" },
+  ];
+}
+
+export default function Gallery() {
+    return (
+        <div className="gallery-page" style={{ minHeight: '100vh', background: '#fdfbf7' }}>
+            <Navbar />
+            <PublicGallery />
+        </div>
+    );
+}
+
+==== FILE: C:\Users\user\Desktop\roomify\app\routes\home.tsx ====
+
+// FILE: C:\Users\user\Desktop\roomify\app\routes\home.tsx
+
+import type { Route } from "./+types/home";
+import Navbar from "../../components/Navbar";
+import {ArrowRight, ArrowUpRight, Clock, Layers, LayoutDashboard, Grid3X3} from "lucide-react";
+import Button from "../../components/ui/Button";
+import Upload from "../../components/Upload";
+import ProjectDashboard from "../../components/ProjectDashboard";
+import {useNavigate} from "react-router";
+import {useEffect, useRef, useState} from "react";
+import {createProject, getProjects} from "../../lib/puter.action";
+import { getRemainingUsage } from "../../lib/usage.tracker";
+import { useOutletContext } from "react-router";
+import type { DesignItem } from "../../lib/types";
+
+export function meta({}: Route.MetaArgs) {
+  return [
+    { title: "Roomify - AI Floor Plan to 3D Converter" },
+    { name: "description", content: "Convert your floor plans into stunning 3D architectural renders using AI" },
+  ];
+}
+
+export default function Home() {
+    const navigate = useNavigate();
+    const { userId } = useOutletContext<AuthContext>();
+    const [projects, setProjects] = useState<DesignItem[]>([]);
+    const isCreatingProjectRef = useRef(false);
+    const [showDashboard, setShowDashboard] = useState(false);
+    const [usageInfo, setUsageInfo] = useState<{ isPremium: boolean } | null>(null);
+
+    useEffect(() => {
+        const loadUsage = async () => {
+            if (userId) {
+                const usage = await getRemainingUsage(userId);
+                setUsageInfo({ isPremium: usage.isPremium });
+            }
+        };
+        loadUsage();
+    }, [userId]);
+
+    const handleUploadComplete = async (base64Image: string) => {
+        try {
+            if(isCreatingProjectRef.current) return false;
+            isCreatingProjectRef.current = true;
+            const newId = Date.now().toString();
+            const name = `Residence ${newId}`;
+
+            const newItem: DesignItem = {
+                id: newId, 
+                name, 
+                sourceImage: base64Image,
+                renderedImage: undefined,
+                timestamp: Date.now()
+            }
+
+            const saved = await createProject({ item: newItem, visibility: 'private' });
+
+            if(!saved) {
+                console.error("Failed to create project");
+                return false;
+            }
+
+            setProjects((prev: DesignItem[]) => [saved as DesignItem, ...prev]);
+
+            navigate(`/visualizer/${newId}`, {
+                state: {
+                    initialImage: saved.sourceImage,
+                    initialRendered: saved.renderedImage || null,
+                    name
+                }
+            });
+
+            return true;
+        } finally {
+            isCreatingProjectRef.current = false;
+        }
+    }
+
+    useEffect(() => {
+        const fetchProjects = async () => {
+            const items = await getProjects();
+            setProjects(items as DesignItem[]);
+        }
+
+        fetchProjects();
+    }, []);
+
+  return (
+      <div className="home">
+          <Navbar />
+
+          <section className="hero">
+              <div className="announce">
+                  <div className="dot">
+                      <div className="pulse"></div>
+                  </div>
+
+                  <p>Introducing Roomify 2.0</p>
+              </div>
+
+              <h1>Build beautiful spaces at the speed of thought with Roomify</h1>
+
+              <p className="subtitle">
+                  Roomify is an AI-first design environment that helps you visualize, render, and ship architectural projects faster than ever.
+              </p>
+
+              <div className="actions">
+                  <a href="#upload" className="cta">
+                      Start Building <ArrowRight className="icon" />
+                  </a>
+
+                  <Button variant="outline" size="lg" className="demo">
+                      Watch Demo
+                  </Button>
+              </div>
+
+              <div id="upload" className="upload-shell">
+                <div className="grid-overlay" />
+
+                  <div className="upload-card">
+                      <div className="upload-head">
+                          <div className="upload-icon">
+                              <Layers className="icon" />
+                          </div>
+
+                          <h3>Upload your floor plan</h3>
+                          <p>Supports JPG, PNG, formats up to 10MB</p>
+                      </div>
+
+                      <Upload onComplete={handleUploadComplete} />
+                  </div>
+              </div>
+          </section>
+
+          <section className="projects">
+              <div className="section-inner">
+                  <div className="section-head">
+                      <div className="copy">
+                          <h2>Projects</h2>
+                          <p>Your latest work and shared community projects, all in one place.</p>
+                      </div>
+                      <div className="dashboard-toggle">
+                          <Button 
+                              variant={showDashboard ? 'primary' : 'secondary'} 
+                              onClick={() => setShowDashboard(!showDashboard)}
+                              size="sm"
+                          >
+                              {showDashboard ? (
+                                  <>
+                                      <Grid3X3 size={16} />
+                                      Show Projects Grid
+                                  </>
+                              ) : (
+                                  <>
+                                      <LayoutDashboard size={16} />
+                                      View Dashboard
+                                  </>
+                              )}
+                          </Button>
+                      </div>
+                  </div>
+
+                  {showDashboard && userId ? (
+                      <ProjectDashboard userId={userId} isPremium={usageInfo?.isPremium || false} />
+                  ) : (
+                      <div className="projects-grid">
+                          {projects.map((project: DesignItem) => (
+                              <div key={project.id} className="project-card group" onClick={() => navigate(`/visualizer/${project.id}`)}>
+                                  <div className="preview">
+                                      <img src={project.renderedImage || project.sourceImage} alt="Project" />
+
+                                      <div className="badge">
+                                          <span>{project.style || 'Modern'}</span>
+                                      </div>
+                                  </div>
+
+                                  <div className="card-body">
+                                      <div>
+                                          <h3>{project.name}</h3>
+
+                                          <div className="meta">
+                                              <Clock size={12} />
+                                              <span>{new Date(project.timestamp).toLocaleDateString()}</span>
+                                              <span>By You</span>
+                                          </div>
+                                      </div>
+                                      <div className="arrow">
+                                          <ArrowUpRight size={18} />
+                                      </div>
+                                  </div>
+                              </div>
+                          ))}
+                          
+                          {projects.length === 0 && (
+                              <div className="empty">
+                                  <p>No projects yet. Upload your first floor plan to get started!</p>
+                              </div>
+                          )}
+                      </div>
+                  )}
+              </div>
+          </section>
+
+          <section className="partners">
+              <div className="section-inner">
+                  <div className="logos">
+                      <div className="logo-item">
+                          <div>ðŸ¢</div>
+                          <span>ARCH</span>
+                      </div>
+                      <div className="logo-item">
+                          <div>ðŸ—ï¸</div>
+                          <span>BUILD</span>
+                      </div>
+                      <div className="logo-item">
+                          <div>ðŸŽ¨</div>
+                          <span>DESIGN</span>
+                      </div>
+                      <div className="logo-item">
+                          <div>ðŸ˜ï¸</div>
+                          <span>REALTY</span>
+                      </div>
+                      <div className="logo-item">
+                          <div>ðŸ“</div>
+                          <span>PLAN</span>
+                      </div>
+                  </div>
+              </div>
+          </section>
+      </div>
+  )
+}
+
+==== FILE: C:\Users\user\Desktop\roomify\app\routes\payment-cancel.tsx ====
+
+// FILE: C:\Users\user\Desktop\roomify\app\routes\payment-cancel.tsx
+
+import { useNavigate } from 'react-router';
+import { XCircle, ArrowLeft } from 'lucide-react';
+import Button from '../../components/ui/Button';
+
+export default function PaymentCancel() {
+    const navigate = useNavigate();
+
+    return (
+        <div className="payment-cancel">
+            <div className="cancel-card">
+                <div className="cancel-icon">
+                    <XCircle size={64} />
+                </div>
+                <h2>Payment Cancelled</h2>
+                <p>Your subscription was not completed. You can try again anytime.</p>
+                <div className="actions">
+                    <Button onClick={() => navigate('/')} variant="outline">
+                        <ArrowLeft size={16} />
+                        Return Home
+                    </Button>
+                    <Button onClick={() => navigate('/')} className="retry-btn">
+                        Try Again
+                    </Button>
+                </div>
+                <p className="help">Need help? Contact us at support@roomify.app</p>
+            </div>
+
+            <style>{`
+                .payment-cancel {
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    background: linear-gradient(135deg, #fdfbf7, #f3f4f6);
+                    padding: 2rem;
+                }
+
+                .cancel-card {
+                    background: white;
+                    border-radius: 2rem;
+                    padding: 3rem;
+                    text-align: center;
+                    max-width: 500px;
+                    width: 100%;
+                    box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+                }
+
+                .cancel-icon {
+                    color: #ef4444;
+                    margin-bottom: 1rem;
+                }
+
+                h2 {
+                    font-size: 1.75rem;
+                    font-weight: bold;
+                    margin-bottom: 0.5rem;
+                }
+
+                p {
+                    color: #6b7280;
+                    margin-bottom: 1.5rem;
+                }
+
+                .actions {
+                    display: flex;
+                    gap: 1rem;
+                    justify-content: center;
+                    margin-bottom: 1.5rem;
+                }
+
+                .retry-btn {
+                    background: linear-gradient(135deg, #f97316, #ea580c);
+                    color: white;
+                }
+
+                .help {
+                    font-size: 0.75rem;
+                    margin-bottom: 0;
+                }
+
+                @media (max-width: 640px) {
+                    .cancel-card {
+                        padding: 2rem;
+                    }
+                    
+                    h2 {
+                        font-size: 1.5rem;
+                    }
+                    
+                    .actions {
+                        flex-direction: column;
+                    }
+                }
+            `}</style>
+        </div>
+    );
+}
+
+==== FILE: C:\Users\user\Desktop\roomify\app\routes\payment-success.ts ====
+
+
+==== FILE: C:\Users\user\Desktop\roomify\app\routes\visualizer.$id.tsx ====
+
+// FILE: C:\Users\user\Desktop\roomify\app\routes\visualizer.$id.tsx
+
+import { useNavigate, useOutletContext, useParams, useSearchParams } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { generate3DView } from "../../lib/ai.action";
+import { AlertCircle, Box, Download, FileText, RefreshCcw, Share2, X, Crown, Lock, Globe } from "lucide-react";
+import Button from "../../components/ui/Button";
+import StyleSelector from "../../components/StyleSelector";
+import PresetSelector from "../../components/PresetSelector";
+import UpgradeModal from "../../components/UpgradeModal";
+import UpgradeToast from "../../components/UpgradeToast";
+import ShareModal from "../../components/ShareModal";
+import EmailCaptureModal from "../../components/EmailCaptureModal";
+import { createProject, getProjectById, shareProject, incrementProjectView, getPublicProject } from "../../lib/puter.action";
+import { ReactCompareSlider, ReactCompareSliderImage } from "react-compare-slider";
+import type { DesignStyle, DesignItem } from "../../lib/types";
+import type { PresetCategory } from "../../lib/presets";
+import { STYLE_OPTIONS } from "../../lib/constants";
+import { exportToPDF } from "../../lib/pdf.export";
+import { addWatermark } from "../../lib/watermark";
+import { analytics } from "../../lib/analytics";
+import { 
+    checkRenderLimit, 
+    checkExportLimit, 
+    checkPDFExportLimit,
+    checkPremiumStyle,
+    checkPremiumPreset,
+    incrementRenderCount,
+    incrementExportCount,
+    incrementPDFExportCount,
+    getRemainingUsage
+} from "../../lib/usage.tracker";
+
+const VisualizerId = () => {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    const { userId, signIn } = useOutletContext<AuthContext>();
+    const [searchParams] = useSearchParams();
+
+    const hasInitialGenerated = useRef(false);
+    const generationAttempts = useRef(0);
+    const MAX_RETRIES = 2;
+
+    const [project, setProject] = useState<DesignItem | null>(null);
+    const [isProjectLoading, setIsProjectLoading] = useState(true);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [generationError, setGenerationError] = useState<string | null>(null);
+    const [currentImage, setCurrentImage] = useState<string | null>(null);
+    const [selectedStyle, setSelectedStyle] = useState<DesignStyle>('modern');
+    const [selectedPreset, setSelectedPreset] = useState<PresetCategory>('budget');
+    const [isGeneratingNewStyle, setIsGeneratingNewStyle] = useState(false);
+    const [generationProgress, setGenerationProgress] = useState(0);
+    const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+    const [upgradeFeature, setUpgradeFeature] = useState<string>('');
+    const [upgradeTriggerContext, setUpgradeTriggerContext] = useState<'render_limit' | 'export_limit' | 'pdf_limit' | 'premium_style' | 'premium_preset' | 'watermark'>();
+    const [usageInfo, setUsageInfo] = useState<{
+        rendersRemaining: number;
+        exportsRemaining: number;
+        pdfExportsRemaining: number;
+        isPremium: boolean;
+    } | null>(null);
+    
+    // Toast states
+    const [showUpgradeToast, setShowUpgradeToast] = useState(false);
+    const [toastMessage, setToastMessage] = useState('');
+    
+    // Share states
+    const [showShareModal, setShowShareModal] = useState(false);
+    const [isPublic, setIsPublic] = useState(false);
+    const [shareUrl, setShareUrl] = useState<string | null>(null);
+    const [isPublicView, setIsPublicView] = useState(false);
+    const [ownerName, setOwnerName] = useState<string | null>(null);
+
+    // Email capture states
+    const [showEmailCapture, setShowEmailCapture] = useState(false);
+    const [pendingGeneration, setPendingGeneration] = useState<{ style: DesignStyle; preset: PresetCategory } | null>(null);
+
+    const handleBack = () => navigate('/');
+
+    const showUpgradeTrigger = (message: string, context?: typeof upgradeTriggerContext, feature?: string) => {
+        setToastMessage(message);
+        setShowUpgradeToast(true);
+        if (context) {
+            setUpgradeTriggerContext(context);
+            setUpgradeFeature(feature || '');
+        }
+    };
+
+    const loadUsageInfo = async () => {
+        if (userId) {
+            const usage = await getRemainingUsage(userId);
+            setUsageInfo(usage);
+        }
+    };
+
+    useEffect(() => {
+        loadUsageInfo();
+    }, [userId]);
+
+    useEffect(() => {
+        const shareToken = searchParams.get('share');
+        
+        if (shareToken && id) {
+            setIsPublicView(true);
+            const loadPublicProject = async () => {
+                const publicProject = await getPublicProject(id, shareToken);
+                if (publicProject) {
+                    setProject(publicProject);
+                    setCurrentImage(publicProject.renderedImage || null);
+                    setSelectedStyle(publicProject.style || 'modern');
+                    setSelectedPreset(publicProject.preset || 'budget');
+                    setOwnerName(publicProject.sharedBy || 'Anonymous');
+                    setIsProjectLoading(false);
+                    await incrementProjectView(id);
+                    analytics.pageView(`public_view_${id}`);
+                } else {
+                    setGenerationError('Project not found or share link invalid');
+                    setIsProjectLoading(false);
+                    analytics.error('public_project_not_found');
+                }
+            };
+            loadPublicProject();
+        }
+    }, [id, searchParams]);
+
+    const handleExport = async () => {
+        if (!currentImage) return;
+
+        analytics.featureUsed('export_png');
+        analytics.click('export_png_button');
+
+        if (userId) {
+            const limitCheck = await checkExportLimit(userId);
+            
+            if (limitCheck.showUpgrade) {
+                showUpgradeTrigger(limitCheck.message || 'âš ï¸ You\'re about to hit your export limit. Upgrade to Pro for unlimited exports!', 'export_limit');
+            }
+            
+            if (!limitCheck.allowed) {
+                setUpgradeFeature('exports');
+                setUpgradeTriggerContext('export_limit');
+                setShowUpgradeModal(true);
+                analytics.dropOff('export_limit_reached');
+                return;
+            }
+            
+            await incrementExportCount(userId);
+            await loadUsageInfo();
+        }
+
+        const finalImage = await addWatermark(currentImage, usageInfo?.isPremium || false);
+        
+        const link = document.createElement('a');
+        link.href = finalImage;
+        link.download = `roomify-${id || 'design'}-${selectedStyle}-${selectedPreset}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        analytics.conversion('png_export_complete');
+    }
+    
+    const handlePDFExport = async () => {
+        if (!project?.sourceImage || !currentImage) {
+            alert('Both original and rendered images are required for PDF export');
+            return;
+        }
+        
+        analytics.featureUsed('export_pdf');
+        analytics.click('export_pdf_button');
+        
+        if (userId) {
+            const limitCheck = await checkPDFExportLimit(userId);
+            
+            if (limitCheck.showUpgrade) {
+                showUpgradeTrigger(limitCheck.message || 'âš ï¸ You\'re about to hit your PDF export limit. Upgrade to Pro for unlimited PDF exports!', 'pdf_limit');
+            }
+            
+            if (!limitCheck.allowed) {
+                setUpgradeFeature('PDF exports');
+                setUpgradeTriggerContext('pdf_limit');
+                setShowUpgradeModal(true);
+                analytics.dropOff('pdf_limit_reached');
+                return;
+            }
+            
+            await incrementPDFExportCount(userId);
+            await loadUsageInfo();
+        }
+        
+        try {
+            const styleName = STYLE_OPTIONS.find(s => s.id === selectedStyle)?.name || selectedStyle;
+            const presetName = getPresetName(selectedPreset);
+            const date = new Date().toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+            
+            const watermarkedImage = await addWatermark(currentImage, usageInfo?.isPremium || false);
+            
+            await exportToPDF({
+                title: project?.name || `Residence ${id}`,
+                beforeImage: project.sourceImage,
+                afterImage: watermarkedImage,
+                styleName: `${styleName} - ${presetName}`,
+                date: date,
+                projectId: id || 'unknown'
+            });
+            
+            analytics.conversion('pdf_export_complete');
+        } catch (error) {
+            console.error('PDF export failed:', error);
+            alert('Failed to generate PDF. Please make sure images are loaded and try again.');
+            analytics.error('pdf_export_failed');
+        }
+    };
+    
+    const getPresetName = (presetId: PresetCategory): string => {
+        const presetNames: Record<PresetCategory, string> = {
+            luxury: 'Luxury Estate',
+            budget: 'Budget Friendly',
+            minimalist: 'Minimalist Zen',
+            eclectic: 'Eclectic Boho',
+            traditional: 'Classic Traditional'
+        };
+        return presetNames[presetId] || presetId;
+    };
+    
+    const handleRetryGeneration = async () => {
+        if (!project) return;
+        generationAttempts.current = 0;
+        setGenerationError(null);
+        await runGeneration(project, selectedStyle, selectedPreset);
+    }
+
+    const handleStyleChange = async (style: DesignStyle) => {
+        if (!project || !project.sourceImage) return;
+        
+        const styleCheck = checkPremiumStyle(style);
+        
+        analytics.click('style_selected', { style, isPremium: !styleCheck.isFree });
+        
+        if (!styleCheck.isFree) {
+            showUpgradeTrigger(styleCheck.message || `âœ¨ ${style} style is a Pro feature. Upgrade to unlock all premium styles!`, 'premium_style', style);
+            setUpgradeFeature(`${style} style`);
+            setUpgradeTriggerContext('premium_style');
+            setShowUpgradeModal(true);
+            analytics.dropOff('premium_style_clicked');
+            return;
+        }
+        
+        setSelectedStyle(style);
+        
+        const cacheKey = `${style}-${selectedPreset}`;
+        if (project.renderedPresets && project.renderedPresets[cacheKey]) {
+            const watermarked = await addWatermark(project.renderedPresets[cacheKey], usageInfo?.isPremium || false);
+            setCurrentImage(watermarked);
+            return;
+        }
+        
+        setIsGeneratingNewStyle(true);
+        setGenerationError(null);
+        setGenerationProgress(0);
+        
+        const progressInterval = setInterval(() => {
+            setGenerationProgress(prev => {
+                if (prev >= 90) return prev;
+                return prev + 10;
+            });
+        }, 500);
+        
+        try {
+            const result = await generate3DView({ 
+                sourceImage: project.sourceImage, 
+                style: style,
+                preset: selectedPreset
+            });
+            
+            if (result.renderedImage) {
+                const watermarkedImage = await addWatermark(result.renderedImage, usageInfo?.isPremium || false);
+                setCurrentImage(watermarkedImage);
+                setGenerationProgress(100);
+                
+                const updatedItem = {
+                    ...project,
+                    renderedStyles: {
+                        ...(project.renderedStyles || {}),
+                        [style]: result.renderedImage
+                    },
+                    renderedPresets: {
+                        ...(project.renderedPresets || {}),
+                        [`${style}-${selectedPreset}`]: result.renderedImage
+                    },
+                    renderedImage: result.renderedImage,
+                    style: style,
+                    preset: selectedPreset,
+                    timestamp: Date.now(),
+                };
+                
+                const saved = await createProject({ item: updatedItem, visibility: "private" });
+                if (saved) {
+                    setProject(saved);
+                }
+                analytics.conversion('style_generated', { style });
+            }
+        } catch (error) {
+            console.error('Style generation failed:', error);
+            setGenerationError(error instanceof Error ? error.message : 'Failed to generate this style');
+            analytics.error('style_generation_failed');
+        } finally {
+            clearInterval(progressInterval);
+            setIsGeneratingNewStyle(false);
+            setTimeout(() => setGenerationProgress(0), 1000);
+        }
+    };
+
+    const handlePresetChange = async (preset: PresetCategory) => {
+        if (!project || !project.sourceImage) return;
+        
+        const presetCheck = checkPremiumPreset(preset);
+        
+        analytics.click('preset_selected', { preset, isPremium: !presetCheck.isFree });
+        
+        if (!presetCheck.isFree) {
+            showUpgradeTrigger(presetCheck.message || `ðŸ’Ž ${preset} preset is a Pro feature. Upgrade to unlock all premium presets!`, 'premium_preset', preset);
+            setUpgradeFeature(`${preset} preset`);
+            setUpgradeTriggerContext('premium_preset');
+            setShowUpgradeModal(true);
+            analytics.dropOff('premium_preset_clicked');
+            return;
+        }
+        
+        setSelectedPreset(preset);
+        
+        const cacheKey = `${selectedStyle}-${preset}`;
+        if (project.renderedPresets && project.renderedPresets[cacheKey]) {
+            const watermarked = await addWatermark(project.renderedPresets[cacheKey], usageInfo?.isPremium || false);
+            setCurrentImage(watermarked);
+            return;
+        }
+        
+        setIsGeneratingNewStyle(true);
+        setGenerationError(null);
+        setGenerationProgress(0);
+        
+        const progressInterval = setInterval(() => {
+            setGenerationProgress(prev => {
+                if (prev >= 90) return prev;
+                return prev + 10;
+            });
+        }, 500);
+        
+        try {
+            const result = await generate3DView({ 
+                sourceImage: project.sourceImage, 
+                style: selectedStyle,
+                preset: preset
+            });
+            
+            if (result.renderedImage) {
+                const watermarkedImage = await addWatermark(result.renderedImage, usageInfo?.isPremium || false);
+                setCurrentImage(watermarkedImage);
+                setGenerationProgress(100);
+                
+                const updatedItem = {
+                    ...project,
+                    renderedPresets: {
+                        ...(project.renderedPresets || {}),
+                        [`${selectedStyle}-${preset}`]: result.renderedImage
+                    },
+                    renderedImage: result.renderedImage,
+                    preset: preset,
+                    timestamp: Date.now(),
+                };
+                
+                const saved = await createProject({ item: updatedItem, visibility: "private" });
+                if (saved) {
+                    setProject(saved);
+                }
+                analytics.conversion('preset_generated', { preset });
+            }
+        } catch (error) {
+            console.error('Preset generation failed:', error);
+            setGenerationError(error instanceof Error ? error.message : 'Failed to generate with this preset');
+            analytics.error('preset_generation_failed');
+        } finally {
+            clearInterval(progressInterval);
+            setIsGeneratingNewStyle(false);
+            setTimeout(() => setGenerationProgress(0), 1000);
+        }
+    };
+
+    const runGeneration = async (item: DesignItem, style: DesignStyle = selectedStyle, preset: PresetCategory = selectedPreset) => {
+        if(!id || !item.sourceImage) return;
+
+        // Track generation attempt
+        analytics.featureUsed('render_generation');
+        analytics.click('generate_button', { style, preset });
+
+        // Check for email capture - if no email and not signed in, show capture modal
+        const hasEmail = localStorage.getItem('roomify_captured_email');
+        
+        if (!hasEmail && !userId) {
+            setPendingGeneration({ style, preset });
+            setShowEmailCapture(true);
+            analytics.dropOff('generation_email_capture_required');
+            return;
+        }
+
+        if (userId) {
+            const limitCheck = await checkRenderLimit(userId);
+            
+            if (limitCheck.showUpgrade) {
+                showUpgradeTrigger(limitCheck.message || 'âš ï¸ You\'re about to hit your render limit. Upgrade to Pro for unlimited renders!', 'render_limit');
+            }
+            
+            if (!limitCheck.allowed) {
+                setUpgradeFeature('renders');
+                setUpgradeTriggerContext('render_limit');
+                setShowUpgradeModal(true);
+                analytics.dropOff('render_limit_reached');
+                return;
+            }
+        }
+
+        try {
+            setIsProcessing(true);
+            setGenerationError(null);
+            setGenerationProgress(0);
+            
+            const progressInterval = setInterval(() => {
+                setGenerationProgress(prev => {
+                    if (prev >= 90) return prev;
+                    return prev + 10;
+                });
+            }, 500);
+            
+            console.log(`Starting generation for project: ${id} with ${style} style and ${preset} preset (Attempt ${generationAttempts.current + 1})`);
+            
+            const result = await generate3DView({ sourceImage: item.sourceImage, style, preset });
+
+            if(result.renderedImage) {
+                console.log('Generation successful, saving result...');
+                
+                const watermarkedImage = await addWatermark(result.renderedImage, usageInfo?.isPremium || false);
+                setCurrentImage(watermarkedImage);
+                setGenerationProgress(100);
+
+                if (userId) {
+                    await incrementRenderCount(userId);
+                    await loadUsageInfo();
+                }
+
+                const updatedItem = {
+                    ...item,
+                    renderedImage: result.renderedImage,
+                    renderedPath: result.renderedPath,
+                    style: style,
+                    preset: preset,
+                    renderedStyles: {
+                        ...(item.renderedStyles || {}),
+                        [style]: result.renderedImage
+                    },
+                    renderedPresets: {
+                        ...(item.renderedPresets || {}),
+                        [`${style}-${preset}`]: result.renderedImage
+                    },
+                    timestamp: Date.now(),
+                    ownerId: item.ownerId ?? userId ?? null,
+                    isPublic: item.isPublic ?? false,
+                };
+
+                const saved = await createProject({ item: updatedItem, visibility: "private" });
+
+                if(saved) {
+                    setProject(saved);
+                }
+                
+                // Track successful generation
+                analytics.conversion('render_complete', { style, preset });
+            } else {
+                throw new Error('No rendered image in response');
+            }
+            
+            clearInterval(progressInterval);
+        } catch (error) {
+            console.error('Generation failed: ', error);
+            analytics.error('generation_failed');
+            
+            if (generationAttempts.current < MAX_RETRIES) {
+                generationAttempts.current++;
+                console.log(`Auto-retrying... (${generationAttempts.current}/${MAX_RETRIES})`);
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                await runGeneration(item, style, preset);
+            } else {
+                generationAttempts.current = 0;
+                const errorMessage = error instanceof Error ? error.message : 'Failed to generate 3D view';
+                setGenerationError(errorMessage);
+                setIsProcessing(false);
+            }
+        } finally {
+            if (generationAttempts.current === 0) {
+                setIsProcessing(false);
+                setTimeout(() => setGenerationProgress(0), 1000);
+            }
+        }
+    };
+
+    const handleEmailCaptureSuccess = (email: string) => {
+        console.log('Email captured:', email);
+        setShowEmailCapture(false);
+        analytics.conversion('email_captured_from_generation');
+        
+        // Retry generation if pending
+        if (pendingGeneration && project) {
+            runGeneration(project, pendingGeneration.style, pendingGeneration.preset);
+            setPendingGeneration(null);
+        }
+    };
+
+    useEffect(() => {
+        let isMounted = true;
+
+        const loadProject = async () => {
+            if (!id) {
+                setIsProjectLoading(false);
+                return;
+            }
+
+            setIsProjectLoading(true);
+            setGenerationError(null);
+            generationAttempts.current = 0;
+
+            const fetchedProject = await getProjectById({ id });
+
+            if (!isMounted) return;
+
+            setProject(fetchedProject);
+            
+            if (fetchedProject?.style) {
+                setSelectedStyle(fetchedProject.style);
+            }
+            
+            if (fetchedProject?.preset) {
+                setSelectedPreset(fetchedProject.preset);
+            }
+            
+            if (fetchedProject?.renderedImage) {
+                const watermarked = await addWatermark(fetchedProject.renderedImage, usageInfo?.isPremium || false);
+                setCurrentImage(watermarked);
+            }
+            
+            setIsProjectLoading(false);
+            hasInitialGenerated.current = false;
+        };
+
+        loadProject();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [id]);
+
+    useEffect(() => {
+        if (project && !isPublicView) {
+            setIsPublic(project.isPublic || false);
+            if (project.shareToken) {
+                const baseUrl = window.location.origin;
+                setShareUrl(`${baseUrl}/visualizer/${project.id}?share=${project.shareToken}`);
+            }
+        }
+    }, [project]);
+
+    useEffect(() => {
+        if (
+            isProjectLoading ||
+            hasInitialGenerated.current ||
+            !project?.sourceImage ||
+            isPublicView
+        )
+            return;
+
+        if (project.renderedImage) {
+            const applyWatermarkToExisting = async () => {
+                const watermarked = await addWatermark(project.renderedImage!, usageInfo?.isPremium || false);
+                setCurrentImage(watermarked);
+            };
+            applyWatermarkToExisting();
+            hasInitialGenerated.current = true;
+            return;
+        }
+
+        hasInitialGenerated.current = true;
+        void runGeneration(project);
+    }, [project, isProjectLoading]);
+
+    const handleShareToggle = async () => {
+        if (!project) return;
+        
+        analytics.click('share_toggle', { isPublic: !isPublic });
+        
+        const newPublicState = !isPublic;
+        const result = await shareProject(project.id, newPublicState);
+        
+        if (result.success) {
+            setIsPublic(newPublicState);
+            if (result.shareUrl) {
+                setShareUrl(result.shareUrl);
+            }
+            
+            const updatedProject: DesignItem = {
+                ...project,
+                isPublic: newPublicState,
+                shareToken: result.shareToken
+            };
+            
+            setProject(updatedProject);
+            analytics.conversion(newPublicState ? 'project_made_public' : 'project_made_private');
+        } else {
+            alert('Failed to update share settings. Please try again.');
+            analytics.error('share_toggle_failed');
+        }
+    };
+
+    const handleWatermarkClick = () => {
+        if (!usageInfo?.isPremium) {
+            analytics.click('watermark_clicked');
+            showUpgradeTrigger('ðŸš« Remove watermark and get unlimited everything with Pro!', 'watermark');
+            setShowUpgradeModal(true);
+        }
+    };
+
+    if (isProjectLoading) {
+        return (
+            <div className="visualizer-route loading">
+                <div className="text-center">
+                    <RefreshCcw className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
+                    <p>Loading project...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (!project && !isProjectLoading) {
+        return (
+            <div className="visualizer-route loading">
+                <div className="text-center">
+                    <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+                    <p className="text-red-600 font-semibold mb-2">Project not found</p>
+                    <p className="text-zinc-600 text-sm mb-4">The requested project could not be found.</p>
+                    <Button onClick={handleBack} className="bg-primary hover:bg-orange-600">
+                        Go Back Home
+                    </Button>
+                </div>
+            </div>
+        );
+    }
+
+    const isAnyProcessing = isProcessing || isGeneratingNewStyle;
+    const currentStyleName = STYLE_OPTIONS.find(s => s.id === selectedStyle)?.name || selectedStyle;
+    const currentPresetName = getPresetName(selectedPreset);
+    
+    const isStylePremium = !checkPremiumStyle(selectedStyle).isFree;
+    const isPresetPremium = !checkPremiumPreset(selectedPreset).isFree;
+    const showPremiumBadge = (isStylePremium || isPresetPremium) && usageInfo && !usageInfo.isPremium;
+    const hasWatermark = !usageInfo?.isPremium && currentImage;
+
+    return (
+        <div className="visualizer">
+            <nav className="topbar">
+                <div className="brand">
+                    <Box className="logo" />
+                    <span className="name">Roomify</span>
+                </div>
+                <div className="right-actions">
+                    {usageInfo && !usageInfo.isPremium && (
+                        <button 
+                            className="premium-badge-btn"
+                            onClick={() => {
+                                analytics.click('upgrade_button_clicked');
+                                analytics.conversion('upgrade_modal_shown');
+                                showUpgradeTrigger('Unlock unlimited renders, no watermark, and all premium features!', 'watermark');
+                                setShowUpgradeModal(true);
+                            }}
+                        >
+                            <Crown size={16} />
+                            <span>Upgrade to Pro - $19/mo</span>
+                        </button>
+                    )}
+                    <Button variant="ghost" size="sm" onClick={handleBack} className="exit">
+                        <X className="icon" /> Exit Editor
+                    </Button>
+                </div>
+            </nav>
+
+            {isPublicView && (
+                <div className="public-view-banner">
+                    <Globe size={16} />
+                    <span>You're viewing a shared design by {ownerName || 'a Roomify user'}</span>
+                    {!userId && (
+                        <Button size="sm" variant="primary" onClick={() => signIn()}>
+                            Sign in to create your own designs
+                        </Button>
+                    )}
+                </div>
+            )}
+
+            <section className="content">
+                <div className="panel">
+                    <div className="panel-header">
+                        <div className="panel-meta">
+                            <p>Project</p>
+                            <h2>{project?.name || `Residence ${id}`}</h2>
+                            <p className="note">
+                                Created by You â€¢ Style: {currentStyleName} â€¢ Preset: {currentPresetName}
+                                {showPremiumBadge && (
+                                    <span className="premium-badge-text">
+                                        <Lock size={12} /> Premium
+                                    </span>
+                                )}
+                                {hasWatermark && (
+                                    <span 
+                                        className="watermark-badge clickable" 
+                                        onClick={handleWatermarkClick}
+                                        style={{ cursor: 'pointer' }}
+                                    >
+                                        Watermark â€¢ Click to remove with Pro
+                                    </span>
+                                )}
+                            </p>
+                        </div>
+
+                        <div className="panel-actions">
+                            <Button
+                                size="sm"
+                                onClick={handleExport}
+                                className="export"
+                                disabled={!currentImage || isAnyProcessing}
+                            >
+                                <Download className="w-4 h-4 mr-2" /> PNG
+                            </Button>
+                            <Button
+                                size="sm"
+                                onClick={handlePDFExport}
+                                variant="secondary"
+                                disabled={!currentImage || !project?.sourceImage || isAnyProcessing}
+                            >
+                                <FileText className="w-4 h-4 mr-2" /> PDF
+                            </Button>
+                            {!isPublicView && (
+                                <Button 
+                                    size="sm" 
+                                    onClick={() => setShowShareModal(true)} 
+                                    className="share"
+                                    disabled={isAnyProcessing}
+                                >
+                                    <Share2 className="w-4 h-4 mr-2" />
+                                    Share
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+
+                    {usageInfo && !usageInfo.isPremium && !isPublicView && (
+                        <div className="usage-info-bar">
+                            <div className="usage-stats">
+                                <span>ðŸŽ¨ {usageInfo.rendersRemaining === Infinity ? 'âˆž' : usageInfo.rendersRemaining} renders left</span>
+                                <span>ðŸ“„ {usageInfo.exportsRemaining === Infinity ? 'âˆž' : usageInfo.exportsRemaining} exports left</span>
+                                <span>ðŸ“‘ {usageInfo.pdfExportsRemaining === Infinity ? 'âˆž' : usageInfo.pdfExportsRemaining} PDFs left</span>
+                            </div>
+                            <button 
+                                className="upgrade-link-bar"
+                                onClick={() => {
+                                    analytics.click('usage_bar_upgrade_clicked');
+                                    showUpgradeTrigger('Get unlimited everything with Pro!', 'watermark');
+                                    setShowUpgradeModal(true);
+                                }}
+                            >
+                                Upgrade to Pro - $19/mo <Crown size={14} />
+                            </button>
+                        </div>
+                    )}
+
+                    <div className="style-section">
+                        <StyleSelector 
+                            selectedStyle={selectedStyle}
+                            onStyleChange={handleStyleChange}
+                            isGenerating={isAnyProcessing}
+                        />
+                    </div>
+
+                    <div className="preset-section">
+                        <PresetSelector 
+                            selectedPreset={selectedPreset}
+                            onPresetChange={handlePresetChange}
+                            isGenerating={isAnyProcessing}
+                        />
+                    </div>
+
+                    <div className={`render-area ${isAnyProcessing ? 'is-processing': ''}`}>
+                        {currentImage ? (
+                            <img src={currentImage} alt={`AI Render - ${currentStyleName} - ${currentPresetName}`} className="render-img" />
+                        ) : generationError ? (
+                            <div className="render-placeholder flex flex-col items-center justify-center min-h-[400px]">
+                                <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
+                                <p className="text-red-600 mb-2 font-semibold">Generation Failed</p>
+                                <p className="text-zinc-600 text-sm mb-4 text-center max-w-md">{generationError}</p>
+                                <Button onClick={handleRetryGeneration} className="bg-primary hover:bg-orange-600">
+                                    <RefreshCcw className="w-4 h-4 mr-2" /> Try Again
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="render-placeholder">
+                                {project?.sourceImage && (
+                                    <img src={project?.sourceImage} alt="Original" className="render-fallback" />
+                                )}
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/5">
+                                    <p className="text-zinc-500">Select a style and preset, then generate</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {isAnyProcessing && (
+                            <div className="render-overlay">
+                                <div className="rendering-card">
+                                    <RefreshCcw className="spinner" />
+                                    <span className="title">
+                                        {isGeneratingNewStyle 
+                                            ? `Generating ${currentStyleName} with ${currentPresetName}...` 
+                                            : 'Rendering...'}
+                                    </span>
+                                    <span className="subtitle">
+                                        {isGeneratingNewStyle 
+                                            ? `Creating ${currentStyleName} style with ${currentPresetName} furnishings` 
+                                            : 'Generating your 3D visualization'}
+                                    </span>
+                                    {generationProgress > 0 && (
+                                        <div className="generation-progress">
+                                            <div className="progress-bar">
+                                                <div 
+                                                    className="progress-fill" 
+                                                    style={{ width: `${generationProgress}%` }}
+                                                />
+                                            </div>
+                                            <p className="progress-text">{generationProgress}% complete</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="panel compare">
+                    <div className="panel-header">
+                        <div className="panel-meta">
+                            <p>Comparison</p>
+                            <h3>Before and After</h3>
+                            <p className="note">Original floor plan vs {currentStyleName} - {currentPresetName}</p>
+                        </div>
+                        <div className="hint">Drag to compare</div>
+                    </div>
+
+                    <div className="compare-stage">
+                        {project?.sourceImage && currentImage && !generationError ? (
+                            <ReactCompareSlider
+                                defaultValue={50}
+                                style={{ width: '100%', height: 'auto' }}
+                                itemOne={
+                                    <ReactCompareSliderImage src={project?.sourceImage} alt="before" className="compare-img" />
+                                }
+                                itemTwo={
+                                    <ReactCompareSliderImage src={currentImage} alt="after" className="compare-img" />
+                                }
+                            />
+                        ) : (
+                            <div className="compare-fallback relative">
+                                {project?.sourceImage && (
+                                    <img src={project.sourceImage} alt="Before" className="compare-img" />
+                                )}
+                                {generationError && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/5">
+                                        <p className="text-zinc-500">Generation failed - cannot compare</p>
+                                    </div>
+                                )}
+                                {!generationError && !currentImage && !isAnyProcessing && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/5">
+                                        <p className="text-zinc-500">Select a style and preset above to generate</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </section>
+
+            <UpgradeModal 
+                isOpen={showUpgradeModal}
+                onClose={() => setShowUpgradeModal(false)}
+                featureName={upgradeFeature}
+                remaining={usageInfo?.rendersRemaining === Infinity ? undefined : usageInfo?.rendersRemaining}
+                triggerContext={upgradeTriggerContext}
+            />
+
+            <ShareModal 
+                isOpen={showShareModal}
+                onClose={() => setShowShareModal(false)}
+                projectId={project?.id || id || ''}
+                projectName={project?.name || `Residence ${id}`}
+                isPublic={isPublic}
+                shareUrl={shareUrl}
+                onTogglePublic={handleShareToggle}
+            />
+
+            <EmailCaptureModal 
+                isOpen={showEmailCapture}
+                onClose={() => {
+                    setShowEmailCapture(false);
+                    setPendingGeneration(null);
+                }}
+                onSuccess={handleEmailCaptureSuccess}
+                triggerReason="create_project"
+            />
+
+            {showUpgradeToast && (
+                <UpgradeToast
+                    message={toastMessage}
+                    onClose={() => setShowUpgradeToast(false)}
+                    onUpgrade={() => {
+                        analytics.click('toast_upgrade_clicked');
+                        setShowUpgradeToast(false);
+                        setShowUpgradeModal(true);
+                    }}
+                />
+            )}
+
+            <style>{`
+                .right-actions {
+                    display: flex;
+                    align-items: center;
+                    gap: 1rem;
+                }
+                
+                .premium-badge-btn {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+                    color: white;
+                    border: none;
+                    padding: 0.5rem 1rem;
+                    border-radius: 0.5rem;
+                    font-size: 0.75rem;
+                    font-weight: bold;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                }
+                
+                .premium-badge-btn:hover {
+                    transform: scale(1.05);
+                    background: linear-gradient(135deg, #f59e0b, #d97706);
+                }
+                
+                .premium-badge-text {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 0.25rem;
+                    background: #fef3c7;
+                    color: #d97706;
+                    padding: 0.125rem 0.5rem;
+                    border-radius: 0.25rem;
+                    font-size: 0.7rem;
+                    font-weight: 500;
+                    margin-left: 0.5rem;
+                }
+                
+                .watermark-badge {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 0.25rem;
+                    background: #e0e7ff;
+                    color: #4f46e5;
+                    padding: 0.125rem 0.5rem;
+                    border-radius: 0.25rem;
+                    font-size: 0.7rem;
+                    font-weight: 500;
+                    margin-left: 0.5rem;
+                }
+                
+                .watermark-badge.clickable {
+                    cursor: pointer;
+                    transition: all 0.2s;
+                }
+                
+                .watermark-badge.clickable:hover {
+                    background: #fef3c7;
+                    color: #f97316;
+                    transform: scale(1.02);
+                }
+                
+                .usage-info-bar {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 0.75rem 1.5rem;
+                    background: #fef3c7;
+                    border-bottom: 1px solid #fde68a;
+                    font-size: 0.75rem;
+                }
+                
+                .usage-stats {
+                    display: flex;
+                    gap: 1.5rem;
+                    color: #92400e;
+                }
+                
+                .usage-stats span {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.25rem;
+                }
+                
+                .upgrade-link-bar {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    background: #f97316;
+                    color: white;
+                    border: none;
+                    padding: 0.375rem 0.75rem;
+                    border-radius: 0.5rem;
+                    font-size: 0.7rem;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                }
+                
+                .upgrade-link-bar:hover {
+                    background: #ea580c;
+                }
+                
+                .public-view-banner {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 1rem;
+                    padding: 0.75rem;
+                    background: linear-gradient(135deg, #fef3c7, #fde68a);
+                    border-bottom: 1px solid #fbbf24;
+                    font-size: 0.875rem;
+                    flex-wrap: wrap;
+                }
+                
+                .style-section {
+                    padding: 1rem 1.5rem;
+                    border-bottom: 1px solid #f3f4f6;
+                    background: #fafafa;
+                }
+                
+                .preset-section {
+                    padding: 1rem 1.5rem;
+                    border-bottom: 1px solid #f3f4f6;
+                    background: linear-gradient(135deg, #fafafa 0%, #ffffff 100%);
+                }
+                
+                .generation-progress {
+                    width: 100%;
+                    max-width: 300px;
+                    margin-top: 1rem;
+                }
+                
+                .progress-bar {
+                    width: 100%;
+                    height: 4px;
+                    background: #e5e7eb;
+                    border-radius: 2px;
+                    overflow: hidden;
+                }
+                
+                .progress-fill {
+                    height: 100%;
+                    background: #f97316;
+                    transition: width 0.3s ease;
+                }
+                
+                .progress-text {
+                    font-size: 0.7rem;
+                    color: #6b7280;
+                    margin-top: 0.5rem;
+                    text-align: center;
+                }
+                
+                @media (max-width: 640px) {
+                    .style-section, .preset-section {
+                        padding: 0.75rem 1rem;
+                    }
+                    
+                    .usage-info-bar {
+                        flex-direction: column;
+                        gap: 0.5rem;
+                        text-align: center;
+                    }
+                    
+                    .usage-stats {
+                        flex-wrap: wrap;
+                        justify-content: center;
+                        gap: 0.75rem;
+                    }
+                    
+                    .right-actions {
+                        gap: 0.5rem;
+                    }
+                    
+                    .public-view-banner {
+                        flex-direction: column;
+                        text-align: center;
+                    }
+                }
+            `}</style>
+        </div>
+    )
+}
+
+export default VisualizerId;

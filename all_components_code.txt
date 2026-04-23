@@ -1,0 +1,4538 @@
+﻿
+==== FILE: C:\Users\user\Desktop\roomify\components\AnalyticsDashboard.tsx ====
+
+// FILE: C:\Users\user\Desktop\roomify\components\AnalyticsDashboard.tsx
+
+import { useState, useEffect } from 'react';
+import { analytics } from '../lib/analytics';
+import { BarChart3, Eye, MousePointer, Users, TrendingUp, AlertCircle, X } from 'lucide-react';
+import Button from './ui/Button';
+
+interface AnalyticsDashboardProps {
+    isAdmin?: boolean;
+}
+
+const AnalyticsDashboard = ({ isAdmin = false }: AnalyticsDashboardProps) => {
+    const [events, setEvents] = useState<any[]>([]);
+    const [stats, setStats] = useState({
+        pageViews: 0,
+        clicks: 0,
+        features: {} as Record<string, number>,
+        conversions: {} as Record<string, number>,
+        dropOffs: {} as Record<string, number>,
+        errors: 0,
+        uniqueSessions: new Set<string>().size
+    });
+    const [show, setShow] = useState(false);
+
+    useEffect(() => {
+        if (!isAdmin) return;
+        
+        const loadEvents = () => {
+            const allEvents = analytics.getEvents();
+            setEvents(allEvents);
+            
+            // Calculate stats
+            const pageViews = allEvents.filter(e => e.name === 'page_view').length;
+            const clicks = allEvents.filter(e => e.name === 'click').length;
+            const errors = allEvents.filter(e => e.name === 'error').length;
+            
+            const features: Record<string, number> = {};
+            const conversions: Record<string, number> = {};
+            const dropOffs: Record<string, number> = {};
+            
+            allEvents.forEach(event => {
+                if (event.name === 'feature_used' && event.properties?.feature) {
+                    const feature = event.properties.feature as string;
+                    features[feature] = (features[feature] || 0) + 1;
+                }
+                if (event.name === 'conversion' && event.properties?.step) {
+                    const step = event.properties.step as string;
+                    conversions[step] = (conversions[step] || 0) + 1;
+                }
+                if (event.name === 'drop_off' && event.properties?.point) {
+                    const point = event.properties.point as string;
+                    dropOffs[point] = (dropOffs[point] || 0) + 1;
+                }
+            });
+            
+            const uniqueSessions = new Set(allEvents.map(e => e.sessionId)).size;
+            
+            setStats({
+                pageViews,
+                clicks,
+                features,
+                conversions,
+                dropOffs,
+                errors,
+                uniqueSessions
+            });
+        };
+        
+        loadEvents();
+        const interval = setInterval(loadEvents, 5000);
+        return () => clearInterval(interval);
+    }, [isAdmin]);
+
+    if (!isAdmin) return null;
+    if (!show) {
+        return (
+            <button 
+                className="analytics-toggle"
+                onClick={() => setShow(true)}
+            >
+                <BarChart3 size={20} />
+                <span>Analytics</span>
+            </button>
+        );
+    }
+
+    return (
+        <div className="analytics-dashboard">
+            <div className="analytics-header">
+                <h3>
+                    <BarChart3 size={20} />
+                    Analytics Dashboard
+                </h3>
+                <button onClick={() => setShow(false)} className="close-analytics">
+                    <X size={18} />
+                </button>
+            </div>
+
+            <div className="analytics-stats-grid">
+                <div className="stat-card">
+                    <Eye size={24} />
+                    <div>
+                        <div className="stat-value">{stats.pageViews}</div>
+                        <div className="stat-label">Page Views</div>
+                    </div>
+                </div>
+                <div className="stat-card">
+                    <MousePointer size={24} />
+                    <div>
+                        <div className="stat-value">{stats.clicks}</div>
+                        <div className="stat-label">Clicks</div>
+                    </div>
+                </div>
+                <div className="stat-card">
+                    <Users size={24} />
+                    <div>
+                        <div className="stat-value">{stats.uniqueSessions}</div>
+                        <div className="stat-label">Unique Sessions</div>
+                    </div>
+                </div>
+                <div className="stat-card">
+                    <AlertCircle size={24} />
+                    <div>
+                        <div className="stat-value">{stats.errors}</div>
+                        <div className="stat-label">Errors</div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="analytics-section">
+                <h4>Feature Usage</h4>
+                <div className="feature-list">
+                    {Object.entries(stats.features).map(([feature, count]) => (
+                        <div key={feature} className="feature-item">
+                            <span>{feature}</span>
+                            <div className="feature-bar">
+                                <div className="feature-fill" style={{ width: `${Math.min(100, (count / Math.max(1, stats.pageViews)) * 100)}%` }} />
+                            </div>
+                            <span className="feature-count">{count}</span>
+                        </div>
+                    ))}
+                    {Object.keys(stats.features).length === 0 && (
+                        <p className="no-data">No feature usage data yet</p>
+                    )}
+                </div>
+            </div>
+
+            <div className="analytics-section">
+                <h4>Conversion Funnel</h4>
+                <div className="conversion-funnel">
+                    {Object.entries(stats.conversions).map(([step, count]) => (
+                        <div key={step} className="funnel-step">
+                            <div className="funnel-label">{step}</div>
+                            <div className="funnel-bar">
+                                <div className="funnel-fill" style={{ width: `${Math.min(100, (count / Math.max(1, stats.uniqueSessions)) * 100)}%` }} />
+                            </div>
+                            <div className="funnel-count">{count}</div>
+                        </div>
+                    ))}
+                    {Object.keys(stats.conversions).length === 0 && (
+                        <p className="no-data">No conversion data yet</p>
+                    )}
+                </div>
+            </div>
+
+            <div className="analytics-section">
+                <h4>Drop-off Points</h4>
+                <div className="dropoff-list">
+                    {Object.entries(stats.dropOffs).map(([point, count]) => (
+                        <div key={point} className="dropoff-item">
+                            <span>{point}</span>
+                            <span className="dropoff-count">{count}</span>
+                        </div>
+                    ))}
+                    {Object.keys(stats.dropOffs).length === 0 && (
+                        <p className="no-data">No drop-off data yet</p>
+                    )}
+                </div>
+            </div>
+
+            <div className="analytics-actions">
+                <Button size="sm" variant="ghost" onClick={() => analytics.clearEvents()}>
+                    Clear Events
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => window.location.reload()}>
+                    Refresh
+                </Button>
+            </div>
+
+            <style>{`
+                .analytics-toggle {
+                    position: fixed;
+                    bottom: 20px;
+                    right: 20px;
+                    background: linear-gradient(135deg, #1a1a1a, #2d2d2d);
+                    color: white;
+                    border: none;
+                    border-radius: 50px;
+                    padding: 10px 20px;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    cursor: pointer;
+                    z-index: 999;
+                    font-size: 14px;
+                    font-weight: 500;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                    transition: all 0.2s;
+                }
+
+                .analytics-toggle:hover {
+                    transform: scale(1.05);
+                    background: linear-gradient(135deg, #f97316, #ea580c);
+                }
+
+                .analytics-dashboard {
+                    position: fixed;
+                    bottom: 80px;
+                    right: 20px;
+                    width: 400px;
+                    max-width: calc(100vw - 40px);
+                    background: white;
+                    border-radius: 16px;
+                    box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+                    z-index: 1000;
+                    overflow: hidden;
+                    animation: slideUp 0.3s ease;
+                }
+
+                @keyframes slideUp {
+                    from {
+                        opacity: 0;
+                        transform: translateY(20px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
+                }
+
+                .analytics-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 16px;
+                    background: linear-gradient(135deg, #1a1a1a, #2d2d2d);
+                    color: white;
+                }
+
+                .analytics-header h3 {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    margin: 0;
+                    font-size: 16px;
+                }
+
+                .close-analytics {
+                    background: none;
+                    border: none;
+                    color: white;
+                    cursor: pointer;
+                    padding: 4px;
+                }
+
+                .analytics-stats-grid {
+                    display: grid;
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 12px;
+                    padding: 16px;
+                    background: #f9fafb;
+                }
+
+                .stat-card {
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    padding: 12px;
+                    background: white;
+                    border-radius: 12px;
+                    border: 1px solid #e5e7eb;
+                }
+
+                .stat-card svg {
+                    color: #f97316;
+                }
+
+                .stat-value {
+                    font-size: 24px;
+                    font-weight: bold;
+                    color: #1a1a1a;
+                }
+
+                .stat-label {
+                    font-size: 12px;
+                    color: #6b7280;
+                }
+
+                .analytics-section {
+                    padding: 16px;
+                    border-top: 1px solid #e5e7eb;
+                }
+
+                .analytics-section h4 {
+                    margin: 0 0 12px 0;
+                    font-size: 14px;
+                    font-weight: 600;
+                }
+
+                .feature-list, .dropoff-list {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                }
+
+                .feature-item, .dropoff-item {
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    font-size: 13px;
+                }
+
+                .feature-item span:first-child, .dropoff-item span:first-child {
+                    width: 100px;
+                    color: #4b5563;
+                }
+
+                .feature-bar, .funnel-bar {
+                    flex: 1;
+                    height: 8px;
+                    background: #e5e7eb;
+                    border-radius: 4px;
+                    overflow: hidden;
+                }
+
+                .feature-fill, .funnel-fill {
+                    height: 100%;
+                    background: linear-gradient(90deg, #f97316, #ea580c);
+                    border-radius: 4px;
+                    transition: width 0.3s;
+                }
+
+                .feature-count, .funnel-count {
+                    width: 40px;
+                    text-align: right;
+                    color: #6b7280;
+                }
+
+                .dropoff-count {
+                    color: #ef4444;
+                    font-weight: 600;
+                }
+
+                .conversion-funnel {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+                }
+
+                .funnel-step {
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                }
+
+                .funnel-label {
+                    width: 100px;
+                    font-size: 13px;
+                    color: #4b5563;
+                }
+
+                .no-data {
+                    text-align: center;
+                    color: #9ca3af;
+                    font-size: 13px;
+                    padding: 20px;
+                }
+
+                .analytics-actions {
+                    display: flex;
+                    gap: 8px;
+                    padding: 12px 16px;
+                    border-top: 1px solid #e5e7eb;
+                    background: #f9fafb;
+                }
+            `}</style>
+        </div>
+    );
+};
+
+export default AnalyticsDashboard;
+
+==== FILE: C:\Users\user\Desktop\roomify\components\EmailCaptureModal.tsx ====
+
+// FILE: C:\Users\user\Desktop\roomify\components\EmailCaptureModal.tsx
+
+import { useState } from 'react';
+import { X, Mail, ArrowRight, Sparkles, Crown } from 'lucide-react';
+import Button from './ui/Button';
+
+interface EmailCaptureModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onSuccess: (email: string) => void;
+    triggerReason?: 'gallery_view' | 'save_project' | 'create_project' | 'view_count';
+}
+
+const EmailCaptureModal = ({ isOpen, onClose, onSuccess, triggerReason = 'gallery_view' }: EmailCaptureModalProps) => {
+    const [email, setEmail] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    if (!isOpen) return null;
+
+    const getTitle = () => {
+        switch(triggerReason) {
+            case 'save_project':
+                return 'Save Your Design';
+            case 'create_project':
+                return 'Start Creating';
+            case 'view_count':
+                return 'Love This Design?';
+            default:
+                return 'Join Roomify Community';
+        }
+    };
+
+    const getMessage = () => {
+        switch(triggerReason) {
+            case 'save_project':
+                return 'Sign up to save this design to your gallery and access it anytime.';
+            case 'create_project':
+                return 'Create your own stunning 3D architectural renders in seconds.';
+            case 'view_count':
+                return 'Like and save designs you love. Get inspired by the community.';
+            default:
+                return 'Get early access, design tips, and exclusive features.';
+        }
+    };
+
+    const getBenefits = () => {
+        return [
+            'Save unlimited designs',
+            'Create your own AI renders',
+            'Get 3 free renders to start',
+            'Join the community gallery'
+        ];
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        
+        if (!email || !email.includes('@')) {
+            setError('Please enter a valid email address');
+            return;
+        }
+        
+        setIsLoading(true);
+        setError('');
+        
+        // Simulate API call - in production, save to your database
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Store email in localStorage to remember user
+        localStorage.setItem('roomify_captured_email', email);
+        localStorage.setItem('roomify_capture_date', new Date().toISOString());
+        
+        onSuccess(email);
+        setIsLoading(false);
+    };
+
+    return (
+        <div className="email-capture-overlay" onClick={onClose}>
+            <div className="email-capture-modal" onClick={(e) => e.stopPropagation()}>
+                <button className="close-btn" onClick={onClose}>
+                    <X size={20} />
+                </button>
+
+                <div className="modal-content">
+                    <div className="icon-wrapper">
+                        <Sparkles size={32} />
+                    </div>
+                    
+                    <h2>{getTitle()}</h2>
+                    <p className="message">{getMessage()}</p>
+
+                    <form onSubmit={handleSubmit}>
+                        <div className="input-group">
+                            <Mail size={18} />
+                            <input
+                                type="email"
+                                placeholder="Enter your email address"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                disabled={isLoading}
+                                autoFocus
+                            />
+                        </div>
+                        
+                        {error && <p className="error">{error}</p>}
+                        
+                        <Button 
+                            type="submit" 
+                            className="submit-btn" 
+                            disabled={isLoading}
+                            fullWidth
+                        >
+                            {isLoading ? (
+                                'Creating account...'
+                            ) : (
+                                <>
+                                    Get Started Free
+                                    <ArrowRight size={16} />
+                                </>
+                            )}
+                        </Button>
+                    </form>
+
+                    <div className="benefits">
+                        <p className="benefits-title">What you get:</p>
+                        <ul>
+                            {getBenefits().map((benefit, index) => (
+                                <li key={index}>
+                                    <Crown size={14} />
+                                    <span>{benefit}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+
+                    <p className="terms">
+                        By signing up, you agree to our Terms of Service and Privacy Policy.
+                        No credit card required. Cancel anytime.
+                    </p>
+                </div>
+
+                <style>{`
+                    .email-capture-overlay {
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background: rgba(0, 0, 0, 0.8);
+                        backdrop-filter: blur(4px);
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        z-index: 1001;
+                        padding: 1rem;
+                    }
+
+                    .email-capture-modal {
+                        background: white;
+                        border-radius: 1.5rem;
+                        max-width: 480px;
+                        width: 100%;
+                        position: relative;
+                        overflow: hidden;
+                        animation: slideUp 0.3s ease-out;
+                    }
+
+                    @keyframes slideUp {
+                        from {
+                            transform: translateY(20px);
+                            opacity: 0;
+                        }
+                        to {
+                            transform: translateY(0);
+                            opacity: 1;
+                        }
+                    }
+
+                    .close-btn {
+                        position: absolute;
+                        top: 1rem;
+                        right: 1rem;
+                        background: none;
+                        border: none;
+                        cursor: pointer;
+                        color: #6b7280;
+                        z-index: 1;
+                    }
+
+                    .close-btn:hover {
+                        color: #1a1a1a;
+                    }
+
+                    .modal-content {
+                        padding: 2rem;
+                        text-align: center;
+                    }
+
+                    .icon-wrapper {
+                        width: 64px;
+                        height: 64px;
+                        background: linear-gradient(135deg, #f97316, #ea580c);
+                        border-radius: 50%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        margin: 0 auto 1rem;
+                        color: white;
+                    }
+
+                    .modal-content h2 {
+                        font-size: 1.75rem;
+                        font-weight: bold;
+                        margin-bottom: 0.75rem;
+                        color: #1a1a1a;
+                    }
+
+                    .message {
+                        color: #6b7280;
+                        font-size: 0.95rem;
+                        margin-bottom: 1.5rem;
+                        line-height: 1.5;
+                    }
+
+                    .input-group {
+                        display: flex;
+                        align-items: center;
+                        gap: 0.75rem;
+                        border: 1px solid #e5e7eb;
+                        border-radius: 0.75rem;
+                        padding: 0.75rem 1rem;
+                        margin-bottom: 1rem;
+                        transition: all 0.2s;
+                    }
+
+                    .input-group:focus-within {
+                        border-color: #f97316;
+                        box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+                    }
+
+                    .input-group input {
+                        flex: 1;
+                        border: none;
+                        outline: none;
+                        font-size: 0.95rem;
+                    }
+
+                    .error {
+                        color: #ef4444;
+                        font-size: 0.75rem;
+                        margin-bottom: 1rem;
+                        text-align: left;
+                    }
+
+                    .submit-btn {
+                        background: linear-gradient(135deg, #f97316, #ea580c);
+                        color: white;
+                        border: none;
+                        padding: 0.875rem;
+                        font-weight: 600;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        gap: 0.5rem;
+                    }
+
+                    .submit-btn:hover:not(:disabled) {
+                        background: linear-gradient(135deg, #ea580c, #c2410c);
+                    }
+
+                    .benefits {
+                        margin-top: 1.5rem;
+                        padding-top: 1.5rem;
+                        border-top: 1px solid #f3f4f6;
+                        text-align: left;
+                    }
+
+                    .benefits-title {
+                        font-size: 0.75rem;
+                        font-weight: 600;
+                        color: #6b7280;
+                        margin-bottom: 0.75rem;
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                    }
+
+                    .benefits ul {
+                        list-style: none;
+                        padding: 0;
+                        margin: 0;
+                    }
+
+                    .benefits li {
+                        display: flex;
+                        align-items: center;
+                        gap: 0.5rem;
+                        padding: 0.375rem 0;
+                        font-size: 0.875rem;
+                        color: #4b5563;
+                    }
+
+                    .benefits li svg {
+                        color: #22c55e;
+                    }
+
+                    .terms {
+                        font-size: 0.7rem;
+                        color: #9ca3af;
+                        margin-top: 1.5rem;
+                        line-height: 1.4;
+                    }
+
+                    @media (max-width: 640px) {
+                        .modal-content {
+                            padding: 1.5rem;
+                        }
+                        
+                        .modal-content h2 {
+                            font-size: 1.5rem;
+                        }
+                    }
+                `}</style>
+            </div>
+        </div>
+    );
+};
+
+export default EmailCaptureModal;
+
+==== FILE: C:\Users\user\Desktop\roomify\components\Navbar.tsx ====
+
+// FILE: C:\Users\user\Desktop\roomify\components\Navbar.tsx
+
+import {Box} from "lucide-react";
+import Button from "./ui/Button";
+import {useOutletContext} from "react-router";
+
+const Navbar = () => {
+    const { isSignedIn, userName, signIn, signOut } = useOutletContext<AuthContext>()
+
+    const handleAuthClick = async () => {
+        if(isSignedIn) {
+            try {
+                await signOut();
+            } catch (e) {
+                console.error(`Puter sign out failed: ${e}`);
+            }
+
+            return;
+        }
+
+        try {
+            await signIn();
+        } catch (e) {
+            console.error(`Puter sign in failed: ${e}`);
+        }
+    };
+
+    return (
+        <header className="navbar">
+            <nav className="inner">
+                <div className="left">
+                    <div className="brand">
+                        <Box  className="logo" />
+
+                        <span className="name">
+                            Roomify
+                        </span>
+                    </div>
+
+                    <ul className="links">
+                        <a href="/">Product</a>
+                        <a href="/gallery">Gallery</a>
+                        <a href="#">Pricing</a>
+                        <a href="#">Community</a>
+                        <a href="#">Enterprise</a>
+                    </ul>
+                </div>
+
+                <div className="actions">
+                    {isSignedIn ? (
+                        <>
+                            <span className="greeting">
+                                {userName ? `Hi, ${userName}` : 'Signed in'}
+                            </span>
+
+                            <Button size="sm" onClick={handleAuthClick} className="btn">
+                                Log Out
+                            </Button>
+                        </>
+                    ) : (
+                        <>
+                            <Button onClick={handleAuthClick} size="sm" variant="ghost">
+                                Log In
+                            </Button>
+
+                            <a href="#upload" className="cta">Get Started</a>
+                        </>
+                    )}
+                </div>
+            </nav>
+        </header>
+    )
+}
+
+export default Navbar
+
+==== FILE: C:\Users\user\Desktop\roomify\components\PresetSelector.tsx ====
+
+// FILE: C:\Users\user\Desktop\roomify\components\PresetSelector.tsx
+
+import { useState } from 'react';
+import { Crown, Sparkles, Palette } from 'lucide-react';
+import { DESIGN_PRESETS, type PresetCategory, type DesignPreset } from '../lib/presets';
+
+interface PresetSelectorProps {
+    selectedPreset: PresetCategory;
+    onPresetChange: (preset: PresetCategory) => void;
+    isGenerating?: boolean;
+}
+
+const PresetSelector = ({ selectedPreset, onPresetChange, isGenerating = false }: PresetSelectorProps) => {
+    const [isHovered, setIsHovered] = useState<string | null>(null);
+
+    const getPresetIcon = (preset: DesignPreset) => {
+        if (preset.priceTier === 'premium') {
+            return <Crown size={16} className="text-yellow-500" />;
+        }
+        return <Palette size={16} />;
+    };
+
+    return (
+        <div className="preset-selector">
+            <div className="preset-selector-header">
+                <div className="header-content">
+                    <Sparkles className="sparkle-icon" />
+                    <h3>Design Preset</h3>
+                    <p className="preset-hint">Choose a furniture and color theme for your space</p>
+                </div>
+            </div>
+
+            <div className="preset-grid">
+                {DESIGN_PRESETS.map((preset) => (
+                    <button
+                        key={preset.id}
+                        className={`preset-card ${selectedPreset === preset.id ? 'selected' : ''} ${preset.priceTier === 'premium' ? 'premium' : ''} ${isGenerating ? 'disabled' : ''}`}
+                        onClick={() => !isGenerating && onPresetChange(preset.id)}
+                        onMouseEnter={() => setIsHovered(preset.id)}
+                        onMouseLeave={() => setIsHovered(null)}
+                        disabled={isGenerating}
+                    >
+                        <div className="preset-header">
+                            <div className="preset-icon">
+                                <span className="preset-emoji">{preset.icon}</span>
+                                {getPresetIcon(preset)}
+                            </div>
+                            {preset.priceTier === 'premium' && (
+                                <div className="premium-badge">
+                                    <Crown size={12} />
+                                    <span>Premium</span>
+                                </div>
+                            )}
+                        </div>
+                        
+                        <div className="preset-info">
+                            <h4>{preset.name}</h4>
+                            <p className="preset-description">{preset.description}</p>
+                        </div>
+
+                        <div className="preset-colors">
+                            <div 
+                                className="color-dot" 
+                                style={{ backgroundColor: preset.colors.primary }}
+                                title="Primary Color"
+                            />
+                            <div 
+                                className="color-dot" 
+                                style={{ backgroundColor: preset.colors.secondary }}
+                                title="Secondary Color"
+                            />
+                            <div 
+                                className="color-dot" 
+                                style={{ backgroundColor: preset.colors.accent }}
+                                title="Accent Color"
+                            />
+                            <div 
+                                className="color-dot" 
+                                style={{ backgroundColor: preset.colors.walls }}
+                                title="Wall Color"
+                            />
+                            <div 
+                                className="color-dot" 
+                                style={{ backgroundColor: preset.colors.floor }}
+                                title="Floor Color"
+                            />
+                        </div>
+
+                        {selectedPreset === preset.id && (
+                            <div className="selected-badge">
+                                <Sparkles size={14} />
+                            </div>
+                        )}
+
+                        {isHovered === preset.id && selectedPreset !== preset.id && !isGenerating && (
+                            <div className="hover-overlay">
+                                <span>Select Preset</span>
+                            </div>
+                        )}
+                    </button>
+                ))}
+            </div>
+
+            <style>{`
+                .preset-selector {
+                    width: 100%;
+                    margin-bottom: 1.5rem;
+                }
+
+                .preset-selector-header {
+                    margin-bottom: 1rem;
+                    text-align: center;
+                }
+
+                .preset-selector-header .header-content {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 0.5rem;
+                }
+
+                .preset-selector-header .sparkle-icon {
+                    width: 24px;
+                    height: 24px;
+                    color: #f97316;
+                }
+
+                .preset-selector-header h3 {
+                    font-size: 1.125rem;
+                    font-weight: 600;
+                    color: #1a1a1a;
+                    margin: 0;
+                }
+
+                .preset-selector-header .preset-hint {
+                    font-size: 0.75rem;
+                    color: #6b7280;
+                    margin: 0;
+                }
+
+                .preset-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+                    gap: 1rem;
+                }
+
+                .preset-card {
+                    position: relative;
+                    padding: 1rem;
+                    background: white;
+                    border: 2px solid #e5e7eb;
+                    border-radius: 1rem;
+                    cursor: pointer;
+                    transition: all 0.2s ease;
+                    text-align: left;
+                }
+
+                .preset-card:hover:not(.disabled) {
+                    border-color: #f97316;
+                    background: #fff7ed;
+                    transform: translateY(-2px);
+                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                }
+
+                .preset-card.selected {
+                    border-color: #f97316;
+                    background: #fff7ed;
+                    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+                }
+
+                .preset-card.premium {
+                    background: linear-gradient(135deg, #ffffff 0%, #fef3c7 100%);
+                }
+
+                .preset-card.disabled {
+                    opacity: 0.5;
+                    cursor: not-allowed;
+                }
+
+                .preset-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 0.75rem;
+                }
+
+                .preset-icon {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                }
+
+                .preset-emoji {
+                    font-size: 1.5rem;
+                }
+
+                .premium-badge {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.25rem;
+                    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+                    color: white;
+                    padding: 0.25rem 0.5rem;
+                    border-radius: 0.5rem;
+                    font-size: 0.7rem;
+                    font-weight: bold;
+                }
+
+                .preset-info h4 {
+                    font-size: 1rem;
+                    font-weight: 600;
+                    margin: 0 0 0.25rem 0;
+                    color: #1a1a1a;
+                }
+
+                .preset-description {
+                    font-size: 0.75rem;
+                    color: #6b7280;
+                    margin: 0 0 0.75rem 0;
+                    line-height: 1.3;
+                }
+
+                .preset-colors {
+                    display: flex;
+                    gap: 0.5rem;
+                    margin-top: 0.5rem;
+                    flex-wrap: wrap;
+                }
+
+                .color-dot {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 50%;
+                    border: 2px solid white;
+                    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+                    cursor: pointer;
+                    transition: transform 0.2s;
+                }
+
+                .color-dot:hover {
+                    transform: scale(1.1);
+                }
+
+                .selected-badge {
+                    position: absolute;
+                    top: -8px;
+                    right: -8px;
+                    width: 24px;
+                    height: 24px;
+                    background: #f97316;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: white;
+                    border: 2px solid white;
+                }
+
+                .hover-overlay {
+                    position: absolute;
+                    inset: 0;
+                    background: rgba(249, 115, 22, 0.9);
+                    border-radius: 1rem;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: white;
+                    font-size: 0.75rem;
+                    font-weight: 600;
+                    backdrop-filter: blur(2px);
+                }
+
+                @media (max-width: 768px) {
+                    .preset-grid {
+                        grid-template-columns: 1fr;
+                    }
+                    
+                    .preset-card {
+                        padding: 0.75rem;
+                    }
+                    
+                    .preset-emoji {
+                        font-size: 1.25rem;
+                    }
+                }
+            `}</style>
+        </div>
+    );
+};
+
+export default PresetSelector;
+
+==== FILE: C:\Users\user\Desktop\roomify\components\ProjectDashboard.tsx ====
+
+// FILE: C:\Users\user\Desktop\roomify\components\ProjectDashboard.tsx
+
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router';
+import { 
+    Search, 
+    Star, 
+    Trash2, 
+    Edit2, 
+    Clock, 
+    X,
+    Check,
+    FolderOpen,
+    Calendar,
+    User
+} from 'lucide-react';
+import Button from './ui/Button';
+import EmailCaptureModal from './EmailCaptureModal';
+import { getProjects, deleteProject, renameProject, toggleFavorite, getFavorites } from '../lib/puter.action';
+import UpgradeModal from './UpgradeModal';
+import { analytics } from '../lib/analytics';
+import type { DesignItem } from '../lib/types';
+
+interface ProjectDashboardProps {
+    userId: string;
+    isPremium: boolean;
+}
+
+const ProjectDashboard = ({ userId, isPremium }: ProjectDashboardProps) => {
+    const navigate = useNavigate();
+    const [projects, setProjects] = useState<DesignItem[]>([]);
+    const [filteredProjects, setFilteredProjects] = useState<DesignItem[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterType, setFilterType] = useState<'all' | 'favorites' | 'recent'>('all');
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editName, setEditName] = useState('');
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+    const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+    const [showEmailCapture, setShowEmailCapture] = useState(false);
+    const [favorites, setFavorites] = useState<string[]>([]);
+    const [sortBy, setSortBy] = useState<'date' | 'name'>('date');
+    const [pendingAction, setPendingAction] = useState<{ type: string; data?: any } | null>(null);
+
+    const loadProjects = async () => {
+        setLoading(true);
+        const allProjects = await getProjects();
+        const favs = await getFavorites();
+        setFavorites(favs);
+        
+        const sorted = [...allProjects].sort((a, b) => {
+            if (sortBy === 'date') {
+                return (b.timestamp || 0) - (a.timestamp || 0);
+            } else {
+                return (a.name || '').localeCompare(b.name || '');
+            }
+        });
+        
+        setProjects(sorted);
+        filterProjects(sorted, searchTerm, filterType, favs);
+        setLoading(false);
+        analytics.pageView('project_dashboard');
+    };
+
+    const filterProjects = (projs: DesignItem[], term: string, filter: string, favs: string[]) => {
+        let filtered = [...projs];
+        
+        if (term) {
+            filtered = filtered.filter(p => 
+                p.name?.toLowerCase().includes(term.toLowerCase()) ||
+                p.id.toLowerCase().includes(term.toLowerCase())
+            );
+        }
+        
+        if (filter === 'favorites') {
+            filtered = filtered.filter(p => favs.includes(p.id));
+        } else if (filter === 'recent') {
+            filtered = filtered.slice(0, 5);
+        }
+        
+        setFilteredProjects(filtered);
+    };
+
+    useEffect(() => {
+        if (userId) {
+            loadProjects();
+        }
+    }, [userId, sortBy]);
+
+    useEffect(() => {
+        filterProjects(projects, searchTerm, filterType, favorites);
+    }, [searchTerm, filterType, projects, favorites]);
+
+    const handleRename = async (id: string, newName: string) => {
+        if (!newName.trim()) return;
+        
+        analytics.click('rename_button', { projectId: id });
+        
+        const hasEmail = localStorage.getItem('roomify_captured_email');
+        
+        if (!hasEmail) {
+            setPendingAction({ type: 'rename', data: { id, newName } });
+            setShowEmailCapture(true);
+            analytics.dropOff('rename_without_email');
+            return;
+        }
+        
+        const success = await renameProject(id, newName);
+        if (success) {
+            await loadProjects();
+            analytics.featureUsed('rename_project');
+            analytics.conversion('project_renamed');
+        }
+        setEditingId(null);
+        setEditName('');
+    };
+
+    const handleDelete = async (id: string) => {
+        analytics.click('delete_button', { projectId: id });
+        
+        const hasEmail = localStorage.getItem('roomify_captured_email');
+        
+        if (!hasEmail) {
+            setPendingAction({ type: 'delete', data: { id } });
+            setShowEmailCapture(true);
+            analytics.dropOff('delete_without_email');
+            return;
+        }
+        
+        const success = await deleteProject(id);
+        if (success) {
+            await loadProjects();
+            analytics.featureUsed('delete_project');
+            analytics.conversion('project_deleted');
+        }
+        setShowDeleteConfirm(null);
+    };
+
+    const handleToggleFavorite = async (id: string) => {
+        const isFavorite = favorites.includes(id);
+        analytics.click('favorite_button', { projectId: id, isFavorite: !isFavorite });
+        
+        const success = await toggleFavorite(id, !isFavorite);
+        if (success) {
+            let newFavorites: string[];
+            if (!isFavorite) {
+                newFavorites = [...favorites, id];
+                analytics.featureUsed('add_favorite');
+            } else {
+                newFavorites = favorites.filter(f => f !== id);
+                analytics.featureUsed('remove_favorite');
+            }
+            setFavorites(newFavorites);
+            filterProjects(projects, searchTerm, filterType, newFavorites);
+        }
+    };
+
+    const handleProjectClick = (projectId: string) => {
+        analytics.click('dashboard_project_click', { projectId });
+        navigate(`/visualizer/${projectId}`);
+    };
+
+    const handleEmailCaptureSuccess = (email: string) => {
+        console.log('Email captured:', email);
+        setShowEmailCapture(false);
+        analytics.conversion('email_captured_from_dashboard');
+        
+        // Retry pending action
+        if (pendingAction) {
+            if (pendingAction.type === 'rename') {
+                handleRename(pendingAction.data.id, pendingAction.data.newName);
+            } else if (pendingAction.type === 'delete') {
+                handleDelete(pendingAction.data.id);
+            }
+            setPendingAction(null);
+        }
+    };
+
+    const formatDate = (timestamp: number) => {
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+        if (diffDays === 0) return 'Today';
+        if (diffDays === 1) return 'Yesterday';
+        if (diffDays < 7) return `${diffDays} days ago`;
+        return date.toLocaleDateString();
+    };
+
+    return (
+        <div className="project-dashboard">
+            <div className="dashboard-header">
+                <h2>My Projects</h2>
+                <p className="subtitle">Manage and organize your architectural visualizations</p>
+            </div>
+
+            <div className="dashboard-controls">
+                <div className="search-box">
+                    <Search size={18} />
+                    <input
+                        type="text"
+                        placeholder="Search by name or ID..."
+                        value={searchTerm}
+                        onChange={(e) => {
+                            setSearchTerm(e.target.value);
+                            analytics.click('dashboard_search');
+                        }}
+                    />
+                    {searchTerm && (
+                        <button onClick={() => setSearchTerm('')} className="clear-search">
+                            <X size={14} />
+                        </button>
+                    )}
+                </div>
+
+                <div className="filter-buttons">
+                    <button
+                        className={`filter-btn ${filterType === 'all' ? 'active' : ''}`}
+                        onClick={() => {
+                            setFilterType('all');
+                            analytics.click('dashboard_filter', { filter: 'all' });
+                        }}
+                    >
+                        All
+                    </button>
+                    <button
+                        className={`filter-btn ${filterType === 'favorites' ? 'active' : ''}`}
+                        onClick={() => {
+                            setFilterType('favorites');
+                            analytics.click('dashboard_filter', { filter: 'favorites' });
+                        }}
+                    >
+                        <Star size={14} />
+                        Favorites
+                    </button>
+                    <button
+                        className={`filter-btn ${filterType === 'recent' ? 'active' : ''}`}
+                        onClick={() => {
+                            setFilterType('recent');
+                            analytics.click('dashboard_filter', { filter: 'recent' });
+                        }}
+                    >
+                        <Clock size={14} />
+                        Recent
+                    </button>
+                </div>
+
+                <div className="sort-buttons">
+                    <button
+                        className={`sort-btn ${sortBy === 'date' ? 'active' : ''}`}
+                        onClick={() => {
+                            setSortBy('date');
+                            analytics.click('dashboard_sort', { sortBy: 'date' });
+                        }}
+                    >
+                        Sort by Date
+                    </button>
+                    <button
+                        className={`sort-btn ${sortBy === 'name' ? 'active' : ''}`}
+                        onClick={() => {
+                            setSortBy('name');
+                            analytics.click('dashboard_sort', { sortBy: 'name' });
+                        }}
+                    >
+                        Sort by Name
+                    </button>
+                </div>
+            </div>
+
+            <div className="stats-bar">
+                <div className="stat">
+                    <FolderOpen size={16} />
+                    <span>{projects.length} Total Projects</span>
+                </div>
+                <div className="stat">
+                    <Star size={16} />
+                    <span>{favorites.length} Favorites</span>
+                </div>
+            </div>
+
+            {loading ? (
+                <div className="loading-projects">
+                    <div className="spinner"></div>
+                    <p>Loading your projects...</p>
+                </div>
+            ) : filteredProjects.length === 0 ? (
+                <div className="empty-state">
+                    {searchTerm ? (
+                        <>
+                            <Search size={48} />
+                            <h3>No matching projects</h3>
+                            <p>Try a different search term</p>
+                        </>
+                    ) : (
+                        <>
+                            <FolderOpen size={48} />
+                            <h3>No projects yet</h3>
+                            <p>Upload your first floor plan to get started</p>
+                            <Button onClick={() => navigate('/#upload')} className="create-btn">
+                                Create Project
+                            </Button>
+                        </>
+                    )}
+                </div>
+            ) : (
+                <div className="projects-grid">
+                    {filteredProjects.map((project) => (
+                        <div key={project.id} className="project-card-dashboard">
+                            <div 
+                                className="project-preview"
+                                onClick={() => handleProjectClick(project.id)}
+                            >
+                                <img 
+                                    src={project.renderedImage || project.sourceImage} 
+                                    alt={project.name || 'Project'}
+                                />
+                                {project.renderedImage && (
+                                    <div className="preview-badge">AI Generated</div>
+                                )}
+                            </div>
+                            
+                            <div className="project-info">
+                                {editingId === project.id ? (
+                                    <div className="rename-input">
+                                        <input
+                                            type="text"
+                                            value={editName}
+                                            onChange={(e) => setEditName(e.target.value)}
+                                            autoFocus
+                                            onKeyPress={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    handleRename(project.id, editName);
+                                                }
+                                            }}
+                                        />
+                                        <button onClick={() => handleRename(project.id, editName)}>
+                                            <Check size={16} />
+                                        </button>
+                                        <button onClick={() => setEditingId(null)}>
+                                            <X size={16} />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="project-name-row">
+                                            <h3 onClick={() => handleProjectClick(project.id)}>
+                                                {project.name || `Project ${project.id.slice(-6)}`}
+                                            </h3>
+                                            <div className="project-actions">
+                                                <button
+                                                    onClick={() => {
+                                                        setEditingId(project.id);
+                                                        setEditName(project.name || '');
+                                                        analytics.click('edit_name_icon', { projectId: project.id });
+                                                    }}
+                                                    className="action-btn"
+                                                    title="Rename"
+                                                >
+                                                    <Edit2 size={14} />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleToggleFavorite(project.id)}
+                                                    className={`action-btn favorite-btn ${favorites.includes(project.id) ? 'active' : ''}`}
+                                                    title={favorites.includes(project.id) ? 'Remove from favorites' : 'Add to favorites'}
+                                                >
+                                                    <Star size={14} />
+                                                </button>
+                                                <button
+                                                    onClick={() => setShowDeleteConfirm(project.id)}
+                                                    className="action-btn delete-btn"
+                                                    title="Delete"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="project-meta">
+                                            <span className="meta-item">
+                                                <Calendar size={12} />
+                                                {formatDate(project.timestamp)}
+                                            </span>
+                                            <span className="meta-item">
+                                                <User size={12} />
+                                                {project.isPublic ? 'Public' : 'Private'}
+                                            </span>
+                                            {project.style && (
+                                                <span className="meta-item style-badge">
+                                                    {project.style}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
+                            {showDeleteConfirm === project.id && (
+                                <div className="delete-confirm-overlay">
+                                    <div className="delete-confirm">
+                                        <h4>Delete Project?</h4>
+                                        <p>This action cannot be undone. The project and all its renders will be permanently deleted.</p>
+                                        <div className="delete-actions">
+                                            <Button size="sm" variant="ghost" onClick={() => setShowDeleteConfirm(null)}>
+                                                Cancel
+                                            </Button>
+                                            <Button size="sm" className="delete-confirm-btn" onClick={() => handleDelete(project.id)}>
+                                                Delete Forever
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            <UpgradeModal 
+                isOpen={showUpgradeModal}
+                onClose={() => setShowUpgradeModal(false)}
+                featureName="advanced features"
+            />
+
+            <EmailCaptureModal 
+                isOpen={showEmailCapture}
+                onClose={() => {
+                    setShowEmailCapture(false);
+                    setPendingAction(null);
+                }}
+                onSuccess={handleEmailCaptureSuccess}
+                triggerReason="save_project"
+            />
+
+            <style>{`
+                .project-dashboard {
+                    max-width: 1200px;
+                    margin: 0 auto;
+                    padding: 2rem;
+                }
+
+                .dashboard-header {
+                    margin-bottom: 2rem;
+                }
+
+                .dashboard-header h2 {
+                    font-size: 2rem;
+                    font-weight: bold;
+                    margin-bottom: 0.5rem;
+                }
+
+                .dashboard-header .subtitle {
+                    color: #6b7280;
+                    font-size: 0.875rem;
+                }
+
+                .dashboard-controls {
+                    display: flex;
+                    gap: 1rem;
+                    flex-wrap: wrap;
+                    margin-bottom: 1.5rem;
+                }
+
+                .search-box {
+                    flex: 1;
+                    min-width: 200px;
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    padding: 0.5rem 1rem;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 0.5rem;
+                    background: white;
+                }
+
+                .search-box input {
+                    flex: 1;
+                    border: none;
+                    outline: none;
+                    font-size: 0.875rem;
+                }
+
+                .clear-search {
+                    background: none;
+                    border: none;
+                    cursor: pointer;
+                    color: #9ca3af;
+                }
+
+                .filter-buttons, .sort-buttons {
+                    display: flex;
+                    gap: 0.5rem;
+                }
+
+                .filter-btn, .sort-btn {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.25rem;
+                    padding: 0.5rem 1rem;
+                    background: white;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 0.5rem;
+                    font-size: 0.875rem;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                }
+
+                .filter-btn:hover, .sort-btn:hover {
+                    border-color: #f97316;
+                    color: #f97316;
+                }
+
+                .filter-btn.active, .sort-btn.active {
+                    background: #f97316;
+                    color: white;
+                    border-color: #f97316;
+                }
+
+                .stats-bar {
+                    display: flex;
+                    gap: 1.5rem;
+                    padding: 1rem;
+                    background: #f9fafb;
+                    border-radius: 0.5rem;
+                    margin-bottom: 1.5rem;
+                }
+
+                .stat {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    font-size: 0.875rem;
+                    color: #4b5563;
+                }
+
+                .projects-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+                    gap: 1.5rem;
+                }
+
+                .project-card-dashboard {
+                    background: white;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 1rem;
+                    overflow: hidden;
+                    transition: all 0.2s;
+                    position: relative;
+                }
+
+                .project-card-dashboard:hover {
+                    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+                    transform: translateY(-2px);
+                }
+
+                .project-preview {
+                    position: relative;
+                    aspect-ratio: 16/9;
+                    overflow: hidden;
+                    cursor: pointer;
+                    background: #f3f4f6;
+                }
+
+                .project-preview img {
+                    width: 100%;
+                    height: 100%;
+                    object-fit: cover;
+                    transition: transform 0.3s;
+                }
+
+                .project-preview:hover img {
+                    transform: scale(1.05);
+                }
+
+                .preview-badge {
+                    position: absolute;
+                    bottom: 0.5rem;
+                    right: 0.5rem;
+                    background: rgba(0, 0, 0, 0.7);
+                    color: white;
+                    padding: 0.25rem 0.5rem;
+                    border-radius: 0.25rem;
+                    font-size: 0.7rem;
+                }
+
+                .project-info {
+                    padding: 1rem;
+                }
+
+                .project-name-row {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 0.5rem;
+                }
+
+                .project-name-row h3 {
+                    font-size: 1rem;
+                    font-weight: 600;
+                    cursor: pointer;
+                    margin: 0;
+                    color: #1a1a1a;
+                }
+
+                .project-name-row h3:hover {
+                    color: #f97316;
+                }
+
+                .project-actions {
+                    display: flex;
+                    gap: 0.5rem;
+                }
+
+                .action-btn {
+                    background: none;
+                    border: none;
+                    cursor: pointer;
+                    padding: 0.25rem;
+                    border-radius: 0.25rem;
+                    color: #9ca3af;
+                    transition: all 0.2s;
+                }
+
+                .action-btn:hover {
+                    background: #f3f4f6;
+                    color: #4b5563;
+                }
+
+                .favorite-btn.active {
+                    color: #fbbf24;
+                }
+
+                .delete-btn:hover {
+                    color: #ef4444;
+                }
+
+                .project-meta {
+                    display: flex;
+                    gap: 0.75rem;
+                    flex-wrap: wrap;
+                    font-size: 0.7rem;
+                    color: #6b7280;
+                }
+
+                .meta-item {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.25rem;
+                }
+
+                .style-badge {
+                    background: #f3f4f6;
+                    padding: 0.125rem 0.375rem;
+                    border-radius: 0.25rem;
+                    text-transform: capitalize;
+                }
+
+                .rename-input {
+                    display: flex;
+                    gap: 0.5rem;
+                    align-items: center;
+                }
+
+                .rename-input input {
+                    flex: 1;
+                    padding: 0.25rem 0.5rem;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 0.25rem;
+                    font-size: 0.875rem;
+                }
+
+                .rename-input button {
+                    background: none;
+                    border: none;
+                    cursor: pointer;
+                    padding: 0.25rem;
+                }
+
+                .delete-confirm-overlay {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(0, 0, 0, 0.5);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 1000;
+                }
+
+                .delete-confirm {
+                    background: white;
+                    padding: 1.5rem;
+                    border-radius: 1rem;
+                    max-width: 400px;
+                    width: 90%;
+                }
+
+                .delete-confirm h4 {
+                    margin: 0 0 0.5rem 0;
+                    font-size: 1.125rem;
+                }
+
+                .delete-confirm p {
+                    color: #6b7280;
+                    font-size: 0.875rem;
+                    margin-bottom: 1.5rem;
+                }
+
+                .delete-actions {
+                    display: flex;
+                    gap: 1rem;
+                    justify-content: flex-end;
+                }
+
+                .delete-confirm-btn {
+                    background: #ef4444;
+                    color: white;
+                }
+
+                .delete-confirm-btn:hover {
+                    background: #dc2626;
+                }
+
+                .empty-state {
+                    text-align: center;
+                    padding: 4rem 2rem;
+                    background: #f9fafb;
+                    border-radius: 1rem;
+                }
+
+                .empty-state svg {
+                    color: #9ca3af;
+                    margin-bottom: 1rem;
+                }
+
+                .empty-state h3 {
+                    font-size: 1.125rem;
+                    margin-bottom: 0.5rem;
+                }
+
+                .empty-state p {
+                    color: #6b7280;
+                    margin-bottom: 1rem;
+                }
+
+                .loading-projects {
+                    text-align: center;
+                    padding: 4rem;
+                }
+
+                .spinner {
+                    width: 40px;
+                    height: 40px;
+                    border: 3px solid #f3f4f6;
+                    border-top-color: #f97316;
+                    border-radius: 50%;
+                    animation: spin 0.6s linear infinite;
+                    margin: 0 auto 1rem;
+                }
+
+                @keyframes spin {
+                    to { transform: rotate(360deg); }
+                }
+
+                @media (max-width: 768px) {
+                    .project-dashboard {
+                        padding: 1rem;
+                    }
+                    
+                    .dashboard-controls {
+                        flex-direction: column;
+                    }
+                    
+                    .projects-grid {
+                        grid-template-columns: 1fr;
+                    }
+                }
+            `}</style>
+        </div>
+    );
+};
+
+export default ProjectDashboard;
+
+==== FILE: C:\Users\user\Desktop\roomify\components\PublicGallery.tsx ====
+
+// FILE: C:\Users\user\Desktop\roomify\components\PublicGallery.tsx
+
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router';
+import { Search, Heart, Eye, Clock, Filter, X, Grid3X3, List, Sparkles } from 'lucide-react';
+import Button from './ui/Button';
+import EmailCaptureModal from './EmailCaptureModal';
+import { getPublicGallery, likeProject } from '../lib/puter.action';
+import { analytics } from '../lib/analytics';
+import type { PublicProject, GalleryFilter } from '../lib/types';
+import { STYLE_OPTIONS } from '../lib/constants';
+import { DESIGN_PRESETS } from '../lib/presets';
+
+const PublicGallery = () => {
+    const navigate = useNavigate();
+    const [projects, setProjects] = useState<PublicProject[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [filter, setFilter] = useState<GalleryFilter>({ sortBy: 'recent' });
+    const [showFilters, setShowFilters] = useState(false);
+    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+    const [showEmailCapture, setShowEmailCapture] = useState(false);
+    const [captureReason, setCaptureReason] = useState<'gallery_view' | 'save_project' | 'create_project' | 'view_count'>('gallery_view');
+
+    const loadGallery = async () => {
+        setLoading(true);
+        const result = await getPublicGallery(filter);
+        setProjects(result.projects);
+        setLoading(false);
+        analytics.pageView('gallery');
+    };
+
+    useEffect(() => {
+        loadGallery();
+    }, [filter]);
+
+    // Show email capture after viewing designs
+    useEffect(() => {
+        const hasSeenCapture = localStorage.getItem('roomify_capture_shown');
+        const hasEmail = localStorage.getItem('roomify_captured_email');
+        
+        if (!hasEmail && !hasSeenCapture && projects.length > 0 && !loading) {
+            const timer = setTimeout(() => {
+                setCaptureReason('gallery_view');
+                setShowEmailCapture(true);
+                localStorage.setItem('roomify_capture_shown', 'true');
+                analytics.conversion('gallery_email_capture_shown');
+            }, 3000);
+            
+            return () => clearTimeout(timer);
+        }
+    }, [projects, loading]);
+
+    const handleLike = async (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        
+        analytics.click('like_button', { projectId: id });
+        
+        const hasEmail = localStorage.getItem('roomify_captured_email');
+        
+        if (!hasEmail) {
+            setCaptureReason('view_count');
+            setShowEmailCapture(true);
+            analytics.dropOff('like_without_email');
+            return;
+        }
+        
+        const result = await likeProject(id, true);
+        if (result.success) {
+            setProjects(projects.map(p => 
+                p.id === id ? { ...p, likeCount: result.likeCount, isLiked: true } : p
+            ));
+            analytics.featureUsed('like_design');
+        }
+    };
+
+    const handleDesignClick = (projectId: string, shareToken?: string) => {
+        analytics.click('gallery_design_click', { projectId });
+        navigate(`/visualizer/${projectId}?share=${shareToken}`);
+    };
+
+    const handleEmailCaptureSuccess = (email: string) => {
+        console.log('Email captured:', email);
+        setShowEmailCapture(false);
+        analytics.conversion('email_captured_from_gallery');
+    };
+
+    const formatDate = (timestamp: number) => {
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+        if (diffDays === 0) return 'Today';
+        if (diffDays === 1) return 'Yesterday';
+        if (diffDays < 7) return `${diffDays} days ago`;
+        return date.toLocaleDateString();
+    };
+
+    return (
+        <div className="public-gallery">
+            <div className="gallery-header">
+                <h1>Community Gallery</h1>
+                <p>Explore stunning architectural designs created by the Roomify community</p>
+            </div>
+
+            <div className="gallery-controls">
+                <div className="search-bar">
+                    <Search size={18} />
+                    <input
+                        type="text"
+                        placeholder="Search designs..."
+                        value={filter.search || ''}
+                        onChange={(e) => {
+                            setFilter({ ...filter, search: e.target.value });
+                            analytics.click('gallery_search');
+                        }}
+                    />
+                    {filter.search && (
+                        <button onClick={() => setFilter({ ...filter, search: undefined })}>
+                            <X size={14} />
+                        </button>
+                    )}
+                </div>
+
+                <div className="view-toggle">
+                    <button
+                        className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`}
+                        onClick={() => {
+                            setViewMode('grid');
+                            analytics.click('gallery_view_mode', { mode: 'grid' });
+                        }}
+                    >
+                        <Grid3X3 size={18} />
+                    </button>
+                    <button
+                        className={`view-btn ${viewMode === 'list' ? 'active' : ''}`}
+                        onClick={() => {
+                            setViewMode('list');
+                            analytics.click('gallery_view_mode', { mode: 'list' });
+                        }}
+                    >
+                        <List size={18} />
+                    </button>
+                </div>
+
+                <button className="filter-toggle" onClick={() => {
+                    setShowFilters(!showFilters);
+                    analytics.click('gallery_filter_toggle');
+                }}>
+                    <Filter size={18} />
+                    Filters
+                </button>
+            </div>
+
+            {showFilters && (
+                <div className="filters-panel">
+                    <div className="filter-group">
+                        <label>Sort By</label>
+                        <div className="filter-buttons">
+                            <button
+                                className={filter.sortBy === 'recent' ? 'active' : ''}
+                                onClick={() => {
+                                    setFilter({ ...filter, sortBy: 'recent' });
+                                    analytics.click('gallery_sort', { sortBy: 'recent' });
+                                }}
+                            >
+                                Most Recent
+                            </button>
+                            <button
+                                className={filter.sortBy === 'popular' ? 'active' : ''}
+                                onClick={() => {
+                                    setFilter({ ...filter, sortBy: 'popular' });
+                                    analytics.click('gallery_sort', { sortBy: 'popular' });
+                                }}
+                            >
+                                Most Viewed
+                            </button>
+                            <button
+                                className={filter.sortBy === 'mostLiked' ? 'active' : ''}
+                                onClick={() => {
+                                    setFilter({ ...filter, sortBy: 'mostLiked' });
+                                    analytics.click('gallery_sort', { sortBy: 'mostLiked' });
+                                }}
+                            >
+                                Most Liked
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="filter-group">
+                        <label>Style</label>
+                        <div className="filter-buttons">
+                            <button
+                                className={!filter.style ? 'active' : ''}
+                                onClick={() => setFilter({ ...filter, style: undefined })}
+                            >
+                                All
+                            </button>
+                            {STYLE_OPTIONS.map(style => (
+                                <button
+                                    key={style.id}
+                                    className={filter.style === style.id ? 'active' : ''}
+                                    onClick={() => {
+                                        setFilter({ ...filter, style: style.id });
+                                        analytics.click('gallery_filter_style', { style: style.id });
+                                    }}
+                                >
+                                    {style.name}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="filter-group">
+                        <label>Preset</label>
+                        <div className="filter-buttons">
+                            <button
+                                className={!filter.preset ? 'active' : ''}
+                                onClick={() => setFilter({ ...filter, preset: undefined })}
+                            >
+                                All
+                            </button>
+                            {DESIGN_PRESETS.map(preset => (
+                                <button
+                                    key={preset.id}
+                                    className={filter.preset === preset.id ? 'active' : ''}
+                                    onClick={() => {
+                                        setFilter({ ...filter, preset: preset.id });
+                                        analytics.click('gallery_filter_preset', { preset: preset.id });
+                                    }}
+                                >
+                                    {preset.name}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {loading ? (
+                <div className="gallery-loading">
+                    <div className="spinner"></div>
+                    <p>Loading community designs...</p>
+                </div>
+            ) : projects.length === 0 ? (
+                <div className="gallery-empty">
+                    <Search size={48} />
+                    <h3>No designs found</h3>
+                    <p>Try adjusting your filters or be the first to share a design!</p>
+                </div>
+            ) : (
+                <div className={`gallery-grid ${viewMode}`}>
+                    {projects.map((project) => (
+                        <div
+                            key={project.id}
+                            className="gallery-card"
+                            onClick={() => handleDesignClick(project.id, project.shareToken)}
+                        >
+                            <div className="card-image">
+                                <img src={project.renderedImage || project.sourceImage} alt={project.name || 'Design'} />
+                                <div className="card-overlay">
+                                    <div className="card-stats">
+                                        <span><Eye size={14} /> {project.viewCount || 0}</span>
+                                        <span><Heart size={14} /> {project.likeCount || 0}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="card-info">
+                                <h3>{project.name || `Project ${project.id.slice(-6)}`}</h3>
+                                <div className="card-meta">
+                                    <span className="style-tag">{project.style || 'Modern'}</span>
+                                    <span className="preset-tag">{project.preset || 'Budget'}</span>
+                                </div>
+                                <div className="card-footer">
+                                    <span className="date">
+                                        <Clock size={12} />
+                                        {formatDate(project.timestamp)}
+                                    </span>
+                                    <button
+                                        className={`like-btn ${project.isLiked ? 'liked' : ''}`}
+                                        onClick={(e) => handleLike(project.id, e)}
+                                    >
+                                        <Heart size={14} />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            <EmailCaptureModal 
+                isOpen={showEmailCapture}
+                onClose={() => setShowEmailCapture(false)}
+                onSuccess={handleEmailCaptureSuccess}
+                triggerReason={captureReason}
+            />
+
+            <style>{`
+                .public-gallery {
+                    max-width: 1400px;
+                    margin: 0 auto;
+                    padding: 2rem;
+                }
+
+                .gallery-header {
+                    text-align: center;
+                    margin-bottom: 2rem;
+                }
+
+                .gallery-header h1 {
+                    font-size: 2.5rem;
+                    font-weight: bold;
+                    margin-bottom: 0.5rem;
+                }
+
+                .gallery-header p {
+                    color: #6b7280;
+                }
+
+                .gallery-controls {
+                    display: flex;
+                    gap: 1rem;
+                    margin-bottom: 1.5rem;
+                    flex-wrap: wrap;
+                }
+
+                .search-bar {
+                    flex: 1;
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    padding: 0.5rem 1rem;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 0.5rem;
+                    background: white;
+                }
+
+                .search-bar input {
+                    flex: 1;
+                    border: none;
+                    outline: none;
+                }
+
+                .view-toggle {
+                    display: flex;
+                    gap: 0.25rem;
+                    background: #f3f4f6;
+                    padding: 0.25rem;
+                    border-radius: 0.5rem;
+                }
+
+                .view-btn {
+                    padding: 0.5rem;
+                    background: none;
+                    border: none;
+                    border-radius: 0.375rem;
+                    cursor: pointer;
+                }
+
+                .view-btn.active {
+                    background: white;
+                    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+                }
+
+                .filter-toggle {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    padding: 0.5rem 1rem;
+                    background: white;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 0.5rem;
+                    cursor: pointer;
+                }
+
+                .filters-panel {
+                    background: #f9fafb;
+                    border-radius: 1rem;
+                    padding: 1.5rem;
+                    margin-bottom: 1.5rem;
+                }
+
+                .filter-group {
+                    margin-bottom: 1rem;
+                }
+
+                .filter-group label {
+                    font-size: 0.75rem;
+                    font-weight: 600;
+                    margin-bottom: 0.5rem;
+                    display: block;
+                }
+
+                .filter-buttons {
+                    display: flex;
+                    gap: 0.5rem;
+                    flex-wrap: wrap;
+                }
+
+                .filter-buttons button {
+                    padding: 0.25rem 0.75rem;
+                    background: white;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 0.375rem;
+                    font-size: 0.75rem;
+                    cursor: pointer;
+                }
+
+                .filter-buttons button.active {
+                    background: #f97316;
+                    color: white;
+                    border-color: #f97316;
+                }
+
+                .gallery-grid {
+                    display: grid;
+                    gap: 1.5rem;
+                }
+
+                .gallery-grid.grid {
+                    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+                }
+
+                .gallery-grid.list {
+                    grid-template-columns: 1fr;
+                }
+
+                .gallery-card {
+                    background: white;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 1rem;
+                    overflow: hidden;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                }
+
+                .gallery-card:hover {
+                    transform: translateY(-4px);
+                    box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
+                }
+
+                .card-image {
+                    position: relative;
+                    aspect-ratio: 16/9;
+                    overflow: hidden;
+                }
+
+                .card-image img {
+                    width: 100%;
+                    height: 100%;
+                    object-fit: cover;
+                }
+
+                .card-overlay {
+                    position: absolute;
+                    bottom: 0;
+                    left: 0;
+                    right: 0;
+                    background: linear-gradient(to top, rgba(0,0,0,0.7), transparent);
+                    padding: 1rem;
+                }
+
+                .card-stats {
+                    display: flex;
+                    gap: 1rem;
+                    color: white;
+                    font-size: 0.75rem;
+                }
+
+                .card-stats span {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.25rem;
+                }
+
+                .card-info {
+                    padding: 1rem;
+                }
+
+                .card-info h3 {
+                    font-size: 1rem;
+                    font-weight: 600;
+                    margin-bottom: 0.5rem;
+                }
+
+                .card-meta {
+                    display: flex;
+                    gap: 0.5rem;
+                    margin-bottom: 0.75rem;
+                }
+
+                .style-tag, .preset-tag {
+                    font-size: 0.7rem;
+                    padding: 0.125rem 0.375rem;
+                    border-radius: 0.25rem;
+                    background: #f3f4f6;
+                }
+
+                .card-footer {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+
+                .date {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.25rem;
+                    font-size: 0.7rem;
+                    color: #6b7280;
+                }
+
+                .like-btn {
+                    background: none;
+                    border: none;
+                    cursor: pointer;
+                    color: #9ca3af;
+                    transition: all 0.2s;
+                }
+
+                .like-btn.liked {
+                    color: #ef4444;
+                }
+
+                .like-btn:hover {
+                    transform: scale(1.1);
+                }
+
+                .gallery-loading, .gallery-empty {
+                    text-align: center;
+                    padding: 4rem;
+                }
+
+                .spinner {
+                    width: 40px;
+                    height: 40px;
+                    border: 3px solid #f3f4f6;
+                    border-top-color: #f97316;
+                    border-radius: 50%;
+                    animation: spin 0.6s linear infinite;
+                    margin: 0 auto 1rem;
+                }
+
+                @keyframes spin {
+                    to { transform: rotate(360deg); }
+                }
+
+                @media (max-width: 768px) {
+                    .public-gallery {
+                        padding: 1rem;
+                    }
+                    
+                    .gallery-header h1 {
+                        font-size: 1.75rem;
+                    }
+                }
+            `}</style>
+        </div>
+    );
+};
+
+export default PublicGallery;
+
+==== FILE: C:\Users\user\Desktop\roomify\components\ShareModal.tsx ====
+
+// FILE: C:\Users\user\Desktop\roomify\components\ShareModal.tsx
+
+import { useState } from 'react';
+import { X, Copy, Check, Twitter, Facebook, Linkedin, Mail, Globe, Lock, Share2 } from 'lucide-react';
+import Button from './ui/Button';
+
+interface ShareModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    projectId: string;
+    projectName: string;
+    isPublic: boolean;
+    shareUrl: string | null;
+    onTogglePublic: () => Promise<void>;
+}
+
+const ShareModal = ({ isOpen, onClose, projectId, projectName, isPublic, shareUrl, onTogglePublic }: ShareModalProps) => {
+    const [copied, setCopied] = useState(false);
+    const [isToggling, setIsToggling] = useState(false);
+
+    if (!isOpen) return null;
+
+    const handleCopyLink = async () => {
+        if (shareUrl) {
+            await navigator.clipboard.writeText(shareUrl);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        }
+    };
+
+    const handleTogglePublic = async () => {
+        setIsToggling(true);
+        await onTogglePublic();
+        setIsToggling(false);
+    };
+
+    const shareUrls = {
+        twitter: shareUrl ? `https://twitter.com/intent/tweet?text=Check out my ${projectName} design on Roomify!&url=${encodeURIComponent(shareUrl)}` : '',
+        facebook: shareUrl ? `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}` : '',
+        linkedin: shareUrl ? `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}` : '',
+        email: shareUrl ? `mailto:?subject=Check out my Roomify design&body=I created this ${projectName} design using Roomify AI. Check it out: ${shareUrl}` : ''
+    };
+
+    return (
+        <div className="share-modal-overlay" onClick={onClose}>
+            <div className="share-modal" onClick={(e) => e.stopPropagation()}>
+                <button className="close-btn" onClick={onClose}>
+                    <X size={20} />
+                </button>
+
+                <div className="share-modal-header">
+                    <div className="share-icon">
+                        <Share2 size={28} />
+                    </div>
+                    <h2>Share Project</h2>
+                    <p>Share your {projectName} design with the world</p>
+                </div>
+
+                <div className="share-visibility">
+                    <div className="visibility-info">
+                        {isPublic ? (
+                            <>
+                                <Globe size={18} />
+                                <div>
+                                    <h4>Public</h4>
+                                    <p>Anyone with the link can view this project</p>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <Lock size={18} />
+                                <div>
+                                    <h4>Private</h4>
+                                    <p>Only you can view this project</p>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                    <Button 
+                        size="sm" 
+                        variant={isPublic ? 'secondary' : 'primary'}
+                        onClick={handleTogglePublic}
+                        disabled={isToggling}
+                    >
+                        {isToggling ? 'Updating...' : (isPublic ? 'Make Private' : 'Make Public')}
+                    </Button>
+                </div>
+
+                {isPublic && shareUrl && (
+                    <>
+                        <div className="share-link-section">
+                            <label>Shareable Link</label>
+                            <div className="share-link-box">
+                                <input type="text" readOnly value={shareUrl} />
+                                <button onClick={handleCopyLink} className="copy-btn">
+                                    {copied ? <Check size={18} /> : <Copy size={18} />}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="social-share">
+                            <p>Or share on social media</p>
+                            <div className="social-buttons">
+                                <a href={shareUrls.twitter} target="_blank" rel="noopener noreferrer" className="social-btn twitter">
+                                    <Twitter size={20} />
+                                </a>
+                                <a href={shareUrls.facebook} target="_blank" rel="noopener noreferrer" className="social-btn facebook">
+                                    <Facebook size={20} />
+                                </a>
+                                <a href={shareUrls.linkedin} target="_blank" rel="noopener noreferrer" className="social-btn linkedin">
+                                    <Linkedin size={20} />
+                                </a>
+                                <a href={shareUrls.email} className="social-btn email">
+                                    <Mail size={20} />
+                                </a>
+                            </div>
+                        </div>
+
+                        <div className="embed-section">
+                            <p>Embed this project</p>
+                            <div className="embed-code">
+                                <code>{`<iframe src="${shareUrl}&embed=true" width="800" height="600" frameborder="0"></iframe>`}</code>
+                                <button onClick={() => {
+                                    navigator.clipboard.writeText(`<iframe src="${shareUrl}&embed=true" width="800" height="600" frameborder="0"></iframe>`);
+                                    alert('Embed code copied!');
+                                }} className="copy-embed">
+                                    <Copy size={14} />
+                                </button>
+                            </div>
+                        </div>
+                    </>
+                )}
+
+                <style>{`
+                    .share-modal-overlay {
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background: rgba(0, 0, 0, 0.8);
+                        backdrop-filter: blur(4px);
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        z-index: 1000;
+                        padding: 1rem;
+                    }
+
+                    .share-modal {
+                        background: white;
+                        border-radius: 1.5rem;
+                        max-width: 500px;
+                        width: 100%;
+                        max-height: 90vh;
+                        overflow-y: auto;
+                        padding: 2rem;
+                        position: relative;
+                    }
+
+                    .close-btn {
+                        position: absolute;
+                        top: 1rem;
+                        right: 1rem;
+                        background: none;
+                        border: none;
+                        cursor: pointer;
+                        color: #6b7280;
+                    }
+
+                    .share-modal-header {
+                        text-align: center;
+                        margin-bottom: 1.5rem;
+                    }
+
+                    .share-icon {
+                        width: 56px;
+                        height: 56px;
+                        background: linear-gradient(135deg, #f97316, #ea580c);
+                        border-radius: 50%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        margin: 0 auto 1rem;
+                        color: white;
+                    }
+
+                    .share-modal-header h2 {
+                        font-size: 1.5rem;
+                        font-weight: bold;
+                        margin-bottom: 0.5rem;
+                    }
+
+                    .share-modal-header p {
+                        color: #6b7280;
+                        font-size: 0.875rem;
+                    }
+
+                    .share-visibility {
+                        background: #f9fafb;
+                        border-radius: 1rem;
+                        padding: 1rem;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        margin-bottom: 1.5rem;
+                    }
+
+                    .visibility-info {
+                        display: flex;
+                        align-items: center;
+                        gap: 0.75rem;
+                    }
+
+                    .visibility-info h4 {
+                        font-size: 0.875rem;
+                        font-weight: 600;
+                        margin: 0 0 0.25rem 0;
+                    }
+
+                    .visibility-info p {
+                        font-size: 0.7rem;
+                        color: #6b7280;
+                        margin: 0;
+                    }
+
+                    .share-link-section {
+                        margin-bottom: 1.5rem;
+                    }
+
+                    .share-link-section label {
+                        font-size: 0.75rem;
+                        font-weight: 600;
+                        margin-bottom: 0.5rem;
+                        display: block;
+                    }
+
+                    .share-link-box {
+                        display: flex;
+                        gap: 0.5rem;
+                    }
+
+                    .share-link-box input {
+                        flex: 1;
+                        padding: 0.5rem 0.75rem;
+                        border: 1px solid #e5e7eb;
+                        border-radius: 0.5rem;
+                        font-size: 0.75rem;
+                        background: #f9fafb;
+                    }
+
+                    .copy-btn {
+                        padding: 0.5rem;
+                        background: #f3f4f6;
+                        border: 1px solid #e5e7eb;
+                        border-radius: 0.5rem;
+                        cursor: pointer;
+                    }
+
+                    .social-share {
+                        text-align: center;
+                        margin-bottom: 1.5rem;
+                    }
+
+                    .social-share p {
+                        font-size: 0.75rem;
+                        color: #6b7280;
+                        margin-bottom: 0.75rem;
+                    }
+
+                    .social-buttons {
+                        display: flex;
+                        gap: 0.75rem;
+                        justify-content: center;
+                    }
+
+                    .social-btn {
+                        width: 40px;
+                        height: 40px;
+                        border-radius: 50%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: white;
+                        transition: transform 0.2s;
+                    }
+
+                    .social-btn:hover {
+                        transform: scale(1.1);
+                    }
+
+                    .social-btn.twitter { background: #1DA1F2; }
+                    .social-btn.facebook { background: #4267B2; }
+                    .social-btn.linkedin { background: #0077B5; }
+                    .social-btn.email { background: #6b7280; }
+
+                    .embed-section {
+                        border-top: 1px solid #e5e7eb;
+                        padding-top: 1rem;
+                    }
+
+                    .embed-section p {
+                        font-size: 0.75rem;
+                        color: #6b7280;
+                        margin-bottom: 0.5rem;
+                    }
+
+                    .embed-code {
+                        display: flex;
+                        gap: 0.5rem;
+                        align-items: center;
+                    }
+
+                    .embed-code code {
+                        flex: 1;
+                        font-size: 0.7rem;
+                        background: #f3f4f6;
+                        padding: 0.5rem;
+                        border-radius: 0.5rem;
+                        overflow-x: auto;
+                        white-space: nowrap;
+                    }
+
+                    .copy-embed {
+                        padding: 0.5rem;
+                        background: #f3f4f6;
+                        border: 1px solid #e5e7eb;
+                        border-radius: 0.5rem;
+                        cursor: pointer;
+                    }
+                `}</style>
+            </div>
+        </div>
+    );
+};
+
+export default ShareModal;
+
+==== FILE: C:\Users\user\Desktop\roomify\components\StripeCheckout.tsx ====
+
+// FILE: C:\Users\user\Desktop\roomify\components\StripeCheckout.tsx
+
+import { useState, useEffect } from 'react';
+import { loadStripe } from '@stripe/stripe-js';
+import { STRIPE_PUBLISHABLE_KEY, STRIPE_PRICES } from '../lib/stripe.config';
+import Button from './ui/Button';
+import { Crown, CreditCard, Shield, Zap, Check, ArrowRight } from 'lucide-react';
+
+interface StripeCheckoutProps {
+    userId: string;
+    email: string;
+    onSuccess: () => void;
+    onCancel: () => void;
+    onError: (error: string) => void;
+}
+
+const StripeCheckout = ({ userId, email, onSuccess, onCancel, onError }: StripeCheckoutProps) => {
+    const [isLoading, setIsLoading] = useState(false);
+    const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('monthly');
+    const [stripe, setStripe] = useState<any>(null);
+
+    useEffect(() => {
+        const initStripe = async () => {
+            if (STRIPE_PUBLISHABLE_KEY) {
+                const stripeInstance = await loadStripe(STRIPE_PUBLISHABLE_KEY);
+                setStripe(stripeInstance);
+            }
+        };
+        initStripe();
+    }, []);
+
+    const handleCheckout = async () => {
+        setIsLoading(true);
+        
+        try {
+            const priceId = selectedPlan === 'monthly' ? STRIPE_PRICES.monthly : STRIPE_PRICES.yearly;
+            
+            // Call your backend to create checkout session
+            const response = await fetch('/api/create-checkout-session', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    priceId,
+                    userId,
+                    email,
+                    successUrl: `${window.location.origin}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+                    cancelUrl: `${window.location.origin}/payment-cancel`,
+                }),
+            });
+
+            const data = await response.json();
+            
+            if (data.sessionId && stripe) {
+                const { error } = await stripe.redirectToCheckout({ sessionId: data.sessionId });
+                if (error) {
+                    onError(error.message);
+                }
+            } else {
+                onError('Failed to create checkout session');
+            }
+        } catch (error) {
+            console.error('Checkout error:', error);
+            onError('An error occurred. Please try again.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const plans = {
+        monthly: {
+            name: 'Monthly Pro',
+            price: '$19',
+            period: '/month',
+            features: [
+                'Unlimited AI renders',
+                'Unlimited PNG exports',
+                'Unlimited PDF exports',
+                'No watermark',
+                'All 5 design styles',
+                'All 5 design presets',
+                'Priority processing',
+                'Email support'
+            ]
+        },
+        yearly: {
+            name: 'Yearly Pro',
+            price: '$159',
+            period: '/year',
+            savings: 'Save $69',
+            features: [
+                'Everything in Monthly',
+                '2 months free',
+                'Priority support',
+                'Early access to new features'
+            ]
+        }
+    };
+
+    return (
+        <div className="stripe-checkout">
+            <div className="checkout-header">
+                <div className="icon-wrapper">
+                    <Crown size={32} />
+                </div>
+                <h2>Upgrade to Roomify Pro</h2>
+                <p>Get unlimited access to all features</p>
+            </div>
+
+            <div className="plan-selector">
+                <button
+                    className={`plan-option ${selectedPlan === 'monthly' ? 'active' : ''}`}
+                    onClick={() => setSelectedPlan('monthly')}
+                >
+                    <div className="plan-name">Monthly</div>
+                    <div className="plan-price">$19<span>/month</span></div>
+                </button>
+                <button
+                    className={`plan-option ${selectedPlan === 'yearly' ? 'active' : ''}`}
+                    onClick={() => setSelectedPlan('yearly')}
+                >
+                    <div className="plan-name">Yearly</div>
+                    <div className="plan-price">$159<span>/year</span></div>
+                    <div className="plan-savings">Save $69</div>
+                </button>
+            </div>
+
+            <div className="features-list">
+                {plans[selectedPlan].features.map((feature, index) => (
+                    <div key={index} className="feature-item">
+                        <Check size={16} />
+                        <span>{feature}</span>
+                    </div>
+                ))}
+            </div>
+
+            <div className="payment-actions">
+                <Button
+                    onClick={handleCheckout}
+                    className="checkout-btn"
+                    disabled={isLoading}
+                    fullWidth
+                >
+                    {isLoading ? (
+                        <>
+                            <div className="spinner-small" />
+                            Processing...
+                        </>
+                    ) : (
+                        <>
+                            <CreditCard size={18} />
+                            Pay {plans[selectedPlan].price}{plans[selectedPlan].period}
+                        </>
+                    )}
+                </Button>
+                <Button onClick={onCancel} variant="ghost" fullWidth>
+                    Cancel
+                </Button>
+            </div>
+
+            <div className="security-badges">
+                <div className="badge">
+                    <Shield size={14} />
+                    <span>Secure payment</span>
+                </div>
+                <div className="badge">
+                    <Zap size={14} />
+                    <span>Instant access</span>
+                </div>
+            </div>
+
+            <style>{`
+                .stripe-checkout {
+                    max-width: 500px;
+                    margin: 0 auto;
+                    padding: 2rem;
+                    background: white;
+                    border-radius: 1.5rem;
+                }
+
+                .checkout-header {
+                    text-align: center;
+                    margin-bottom: 2rem;
+                }
+
+                .icon-wrapper {
+                    width: 64px;
+                    height: 64px;
+                    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    margin: 0 auto 1rem;
+                    color: white;
+                }
+
+                .checkout-header h2 {
+                    font-size: 1.5rem;
+                    font-weight: bold;
+                    margin-bottom: 0.5rem;
+                }
+
+                .checkout-header p {
+                    color: #6b7280;
+                    font-size: 0.875rem;
+                }
+
+                .plan-selector {
+                    display: flex;
+                    gap: 1rem;
+                    margin-bottom: 2rem;
+                }
+
+                .plan-option {
+                    flex: 1;
+                    padding: 1rem;
+                    background: #f9fafb;
+                    border: 2px solid #e5e7eb;
+                    border-radius: 1rem;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    text-align: center;
+                    position: relative;
+                }
+
+                .plan-option.active {
+                    border-color: #f97316;
+                    background: #fff7ed;
+                }
+
+                .plan-name {
+                    font-weight: 600;
+                    margin-bottom: 0.5rem;
+                }
+
+                .plan-price {
+                    font-size: 1.5rem;
+                    font-weight: bold;
+                    color: #f97316;
+                }
+
+                .plan-price span {
+                    font-size: 0.875rem;
+                    font-weight: normal;
+                    color: #6b7280;
+                }
+
+                .plan-savings {
+                    position: absolute;
+                    top: -10px;
+                    right: -10px;
+                    background: #22c55e;
+                    color: white;
+                    font-size: 0.7rem;
+                    padding: 0.125rem 0.5rem;
+                    border-radius: 1rem;
+                }
+
+                .features-list {
+                    margin-bottom: 2rem;
+                }
+
+                .feature-item {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.75rem;
+                    padding: 0.5rem 0;
+                    color: #4b5563;
+                    font-size: 0.875rem;
+                }
+
+                .feature-item svg {
+                    color: #22c55e;
+                    flex-shrink: 0;
+                }
+
+                .payment-actions {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0.75rem;
+                    margin-bottom: 1.5rem;
+                }
+
+                .checkout-btn {
+                    background: linear-gradient(135deg, #f97316, #ea580c);
+                    color: white;
+                    border: none;
+                    padding: 0.875rem;
+                    font-weight: 600;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 0.5rem;
+                }
+
+                .checkout-btn:hover:not(:disabled) {
+                    background: linear-gradient(135deg, #ea580c, #c2410c);
+                }
+
+                .spinner-small {
+                    width: 16px;
+                    height: 16px;
+                    border: 2px solid rgba(255, 255, 255, 0.3);
+                    border-top-color: white;
+                    border-radius: 50%;
+                    animation: spin 0.6s linear infinite;
+                }
+
+                @keyframes spin {
+                    to { transform: rotate(360deg); }
+                }
+
+                .security-badges {
+                    display: flex;
+                    justify-content: center;
+                    gap: 1.5rem;
+                }
+
+                .badge {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    font-size: 0.75rem;
+                    color: #6b7280;
+                }
+            `}</style>
+        </div>
+    );
+};
+
+export default StripeCheckout;
+
+==== FILE: C:\Users\user\Desktop\roomify\components\StylePreview.tsx ====
+
+// FILE: C:\Users\user\Desktop\roomify\components\StylePreview.tsx
+
+import { useState } from 'react';
+import { STYLE_OPTIONS, type DesignStyle } from '../lib/constants';
+import { Check, Loader2 } from 'lucide-react';
+
+interface StylePreviewProps {
+    projectId: string;
+    sourceImage: string;
+    onStyleGenerated: (style: DesignStyle, imageUrl: string) => void;
+    existingStyles?: Record<DesignStyle, string>;
+}
+
+const StylePreview = ({ projectId, sourceImage, onStyleGenerated, existingStyles = {
+    modern: '',
+    rustic: '',
+    industrial: '',
+    scandinavian: '',
+    bohemian: ''
+} }: StylePreviewProps) => {
+    const [generatingStyles, setGeneratingStyles] = useState<Set<DesignStyle>>(new Set());
+    const [previewImages, setPreviewImages] = useState<Record<DesignStyle, string>>(existingStyles);
+
+    const generateStyle = async (style: DesignStyle) => {
+        if (generatingStyles.has(style) || previewImages[style]) return;
+        
+        setGeneratingStyles(prev => new Set(prev).add(style));
+        
+        try {
+            // This would call your existing generate3DView function
+            // For now, we'll simulate or you can integrate the actual API
+            console.log(`Generating ${style} style for project ${projectId}`);
+            
+            // Simulate API call (replace with actual)
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // Mock result - in production, this would be the actual generated image
+            const mockImage = sourceImage; // Replace with actual generated image
+            
+            setPreviewImages(prev => ({ ...prev, [style]: mockImage }));
+            onStyleGenerated(style, mockImage);
+        } catch (error) {
+            console.error(`Failed to generate ${style}:`, error);
+        } finally {
+            setGeneratingStyles(prev => {
+                const next = new Set(prev);
+                next.delete(style);
+                return next;
+            });
+        }
+    };
+
+    return (
+        <div className="style-preview-grid">
+            {STYLE_OPTIONS.map((style) => {
+                const isGenerated = !!previewImages[style.id];
+                const isGenerating = generatingStyles.has(style.id);
+                
+                return (
+                    <button
+                        key={style.id}
+                        className={`style-preview-card ${isGenerated ? 'generated' : ''} ${isGenerating ? 'generating' : ''}`}
+                        onClick={() => !isGenerated && !isGenerating && generateStyle(style.id)}
+                        disabled={isGenerating}
+                    >
+                        <div className="preview-icon">{style.icon}</div>
+                        <div className="preview-info">
+                            <h4>{style.name}</h4>
+                            <p>{style.description}</p>
+                        </div>
+                        {isGenerated && (
+                            <div className="generated-badge">
+                                <Check size={14} />
+                            </div>
+                        )}
+                        {isGenerating && (
+                            <div className="generating-spinner">
+                                <Loader2 size={16} className="animate-spin" />
+                            </div>
+                        )}
+                    </button>
+                );
+            })}
+            
+            <style>{`
+                .style-preview-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+                    gap: 0.75rem;
+                    margin-top: 1rem;
+                }
+                
+                .style-preview-card {
+                    position: relative;
+                    display: flex;
+                    align-items: center;
+                    gap: 0.75rem;
+                    padding: 0.75rem;
+                    background: white;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 0.5rem;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    text-align: left;
+                }
+                
+                .style-preview-card:hover:not(.generated) {
+                    border-color: #f97316;
+                    background: #fff7ed;
+                    transform: translateY(-1px);
+                }
+                
+                .style-preview-card.generated {
+                    background: #f0fdf4;
+                    border-color: #22c55e;
+                    cursor: default;
+                }
+                
+                .style-preview-card.generating {
+                    opacity: 0.6;
+                    cursor: wait;
+                }
+                
+                .preview-icon {
+                    font-size: 1.5rem;
+                }
+                
+                .preview-info {
+                    flex: 1;
+                }
+                
+                .preview-info h4 {
+                    font-size: 0.875rem;
+                    font-weight: 600;
+                    margin: 0 0 0.25rem 0;
+                }
+                
+                .preview-info p {
+                    font-size: 0.7rem;
+                    color: #6b7280;
+                    margin: 0;
+                }
+                
+                .generated-badge {
+                    position: absolute;
+                    top: -6px;
+                    right: -6px;
+                    width: 20px;
+                    height: 20px;
+                    background: #22c55e;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: white;
+                    border: 2px solid white;
+                }
+                
+                .generating-spinner {
+                    position: absolute;
+                    top: 50%;
+                    right: 0.75rem;
+                    transform: translateY(-50%);
+                    color: #f97316;
+                }
+            `}</style>
+        </div>
+    );
+};
+
+export default StylePreview;
+
+==== FILE: C:\Users\user\Desktop\roomify\components\StyleSelector.tsx ====
+
+// FILE: C:\Users\user\Desktop\roomify\components\StyleSelector.tsx
+
+import { useState } from 'react';
+import { Check, Sparkles } from 'lucide-react';
+import { STYLE_OPTIONS, type DesignStyle } from '../lib/constants';
+import Button from './ui/Button';
+
+interface StyleSelectorProps {
+    selectedStyle: DesignStyle;
+    onStyleChange: (style: DesignStyle) => void;
+    isGenerating?: boolean;
+}
+
+const StyleSelector = ({ selectedStyle, onStyleChange, isGenerating = false }: StyleSelectorProps) => {
+    const [isHovered, setIsHovered] = useState<string | null>(null);
+
+    return (
+        <div className="style-selector">
+            <div className="style-selector-header">
+                <div className="header-content">
+                    <Sparkles className="sparkle-icon" />
+                    <h3>Design Style</h3>
+                    <p className="style-hint">Choose an aesthetic for your 3D render</p>
+                </div>
+            </div>
+
+            <div className="style-grid">
+                {STYLE_OPTIONS.map((style) => (
+                    <button
+                        key={style.id}
+                        className={`style-card ${selectedStyle === style.id ? 'selected' : ''} ${isGenerating ? 'disabled' : ''}`}
+                        onClick={() => !isGenerating && onStyleChange(style.id)}
+                        onMouseEnter={() => setIsHovered(style.id)}
+                        onMouseLeave={() => setIsHovered(null)}
+                        disabled={isGenerating}
+                    >
+                        <div className="style-icon">
+                            <span className="style-emoji">{style.icon}</span>
+                        </div>
+                        
+                        <div className="style-info">
+                            <h4>{style.name}</h4>
+                            <p className="style-description">{style.description}</p>
+                        </div>
+
+                        {selectedStyle === style.id && (
+                            <div className="selected-badge">
+                                <Check size={14} />
+                            </div>
+                        )}
+
+                        {isHovered === style.id && selectedStyle !== style.id && !isGenerating && (
+                            <div className="hover-overlay">
+                                <span>Select</span>
+                            </div>
+                        )}
+                    </button>
+                ))}
+            </div>
+
+            <style>{`
+                .style-selector {
+                    width: 100%;
+                    margin-bottom: 1.5rem;
+                }
+
+                .style-selector-header {
+                    margin-bottom: 1rem;
+                    text-align: center;
+                }
+
+                .header-content {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 0.5rem;
+                }
+
+                .sparkle-icon {
+                    width: 24px;
+                    height: 24px;
+                    color: #f97316;
+                }
+
+                .style-selector-header h3 {
+                    font-size: 1.125rem;
+                    font-weight: 600;
+                    color: #1a1a1a;
+                    margin: 0;
+                }
+
+                .style-hint {
+                    font-size: 0.75rem;
+                    color: #6b7280;
+                    margin: 0;
+                }
+
+                .style-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                    gap: 0.75rem;
+                }
+
+                .style-card {
+                    position: relative;
+                    display: flex;
+                    align-items: center;
+                    gap: 0.75rem;
+                    padding: 0.75rem 1rem;
+                    background: white;
+                    border: 2px solid #e5e7eb;
+                    border-radius: 0.75rem;
+                    cursor: pointer;
+                    transition: all 0.2s ease;
+                    text-align: left;
+                    width: 100%;
+                }
+
+                .style-card:hover:not(.disabled) {
+                    border-color: #f97316;
+                    background: #fff7ed;
+                    transform: translateY(-2px);
+                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                }
+
+                .style-card.selected {
+                    border-color: #f97316;
+                    background: #fff7ed;
+                    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+                }
+
+                .style-card.disabled {
+                    opacity: 0.5;
+                    cursor: not-allowed;
+                }
+
+                .style-icon {
+                    flex-shrink: 0;
+                    width: 40px;
+                    height: 40px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    background: #f3f4f6;
+                    border-radius: 0.5rem;
+                    transition: all 0.2s ease;
+                }
+
+                .style-card:hover:not(.disabled) .style-icon {
+                    background: #f97316;
+                    transform: scale(1.05);
+                }
+
+                .style-emoji {
+                    font-size: 1.5rem;
+                }
+
+                .style-info {
+                    flex: 1;
+                }
+
+                .style-info h4 {
+                    font-size: 0.875rem;
+                    font-weight: 600;
+                    color: #1a1a1a;
+                    margin: 0 0 0.25rem 0;
+                }
+
+                .style-description {
+                    font-size: 0.7rem;
+                    color: #6b7280;
+                    margin: 0;
+                    line-height: 1.3;
+                }
+
+                .selected-badge {
+                    position: absolute;
+                    top: -8px;
+                    right: -8px;
+                    width: 22px;
+                    height: 22px;
+                    background: #f97316;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: white;
+                    border: 2px solid white;
+                }
+
+                .hover-overlay {
+                    position: absolute;
+                    inset: 0;
+                    background: rgba(249, 115, 22, 0.9);
+                    border-radius: 0.75rem;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: white;
+                    font-size: 0.75rem;
+                    font-weight: 600;
+                    backdrop-filter: blur(2px);
+                }
+
+                @media (max-width: 640px) {
+                    .style-grid {
+                        grid-template-columns: 1fr;
+                    }
+                    
+                    .style-card {
+                        padding: 0.5rem 0.75rem;
+                    }
+                    
+                    .style-icon {
+                        width: 32px;
+                        height: 32px;
+                    }
+                    
+                    .style-emoji {
+                        font-size: 1.25rem;
+                    }
+                }
+            `}</style>
+        </div>
+    );
+};
+
+export default StyleSelector;
+
+==== FILE: C:\Users\user\Desktop\roomify\components\UpgradeModal.tsx ====
+
+// FILE: C:\Users\user\Desktop\roomify\components\UpgradeModal.tsx
+
+import { useState } from 'react';
+import { Crown, X, Check, Sparkles, Zap, Shield, TrendingDown } from 'lucide-react';
+import Button from './ui/Button';
+import StripeCheckout from './StripeCheckout';
+import { getPremiumFeatures, PRO_PRICE } from '../lib/usage.tracker';
+import { useOutletContext } from 'react-router';
+
+interface UpgradeModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    featureName?: string;
+    remaining?: number;
+    triggerContext?: 'render_limit' | 'export_limit' | 'pdf_limit' | 'premium_style' | 'premium_preset' | 'watermark';
+}
+
+const UpgradeModal = ({ isOpen, onClose, featureName, remaining, triggerContext }: UpgradeModalProps) => {
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [billingInterval, setBillingInterval] = useState<'monthly' | 'yearly'>('monthly');
+    const [showStripeCheckout, setShowStripeCheckout] = useState(false);
+    const premiumFeatures = getPremiumFeatures();
+    const { userId, userName, userEmail } = useOutletContext<AuthContext>();
+
+    const monthlyPrice = PRO_PRICE.monthly;
+    const yearlyPrice = PRO_PRICE.yearly;
+    const monthlyEquivalent = Math.round(yearlyPrice / 12);
+    const yearlySavings = (monthlyPrice * 12) - yearlyPrice;
+
+    const getContextualTitle = (): string => {
+        switch(triggerContext) {
+            case 'render_limit':
+                return 'You\'ve Reached Your Render Limit';
+            case 'export_limit':
+                return 'You\'ve Reached Your Export Limit';
+            case 'pdf_limit':
+                return 'You\'ve Reached Your PDF Export Limit';
+            case 'premium_style':
+                return `${featureName || 'Premium'} Style is a Pro Feature`;
+            case 'premium_preset':
+                return `${featureName || 'Premium'} Preset is a Pro Feature`;
+            case 'watermark':
+                return 'Remove Watermark & Go Pro';
+            default:
+                return 'Upgrade to Roomify Pro';
+        }
+    };
+
+    const getContextualMessage = (): string => {
+        switch(triggerContext) {
+            case 'render_limit':
+                return `You've used all ${remaining !== undefined ? remaining : 0} free renders this month. Upgrade to Pro for unlimited renders!`;
+            case 'export_limit':
+                return `You've used all ${remaining !== undefined ? remaining : 0} free exports this month. Upgrade to Pro for unlimited exports!`;
+            case 'pdf_limit':
+                return `You've used all ${remaining !== undefined ? remaining : 0} free PDF exports this month. Upgrade to Pro for unlimited PDF exports!`;
+            case 'premium_style':
+                return `${featureName} styles are a Pro feature. Upgrade to unlock all 5 premium styles!`;
+            case 'premium_preset':
+                return `${featureName} presets are a Pro feature. Upgrade to unlock all 5 premium presets!`;
+            case 'watermark':
+                return 'Remove the watermark and get unlimited everything with Pro. Upgrade today!';
+            default:
+                return 'Get unlimited renders, no watermark, all premium styles, and more!';
+        }
+    };
+
+    const handleUpgrade = () => {
+        setShowStripeCheckout(true);
+    };
+
+    const handleStripeSuccess = () => {
+        setShowStripeCheckout(false);
+        onClose();
+        // Refresh page to update user status
+        window.location.reload();
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="upgrade-modal-overlay" onClick={onClose}>
+            <div className="upgrade-modal" onClick={(e) => e.stopPropagation()}>
+                <button className="close-btn" onClick={onClose}>
+                    <X size={20} />
+                </button>
+
+                {showStripeCheckout ? (
+                    <StripeCheckout
+                        userId={userId || ''}
+                        email={userEmail || userName || ''}
+                        onSuccess={handleStripeSuccess}
+                        onCancel={() => setShowStripeCheckout(false)}
+                        onError={(error) => alert(error)}
+                    />
+                ) : (
+                    <>
+                        <div className="modal-header">
+                            <div className="crown-icon">
+                                <Crown size={32} />
+                            </div>
+                            <h2>{getContextualTitle()}</h2>
+                            <p className="context-message">{getContextualMessage()}</p>
+                            {featureName && remaining !== undefined && remaining === 0 && (
+                                <p className="warning">
+                                    You've used all free {featureName} for this month
+                                </p>
+                            )}
+                            {featureName && remaining !== undefined && remaining > 0 && remaining < 3 && (
+                                <p className="warning">
+                                    Only {remaining} free {featureName} remaining
+                                </p>
+                            )}
+                        </div>
+
+                        <div className="billing-toggle">
+                            <button
+                                className={`toggle-option ${billingInterval === 'monthly' ? 'active' : ''}`}
+                                onClick={() => setBillingInterval('monthly')}
+                            >
+                                Monthly
+                                <span className="price-tag">${monthlyPrice}/mo</span>
+                            </button>
+                            <button
+                                className={`toggle-option ${billingInterval === 'yearly' ? 'active' : ''}`}
+                                onClick={() => setBillingInterval('yearly')}
+                            >
+                                Yearly
+                                <span className="price-tag">${yearlyPrice}/yr</span>
+                                <span className="save-badge">Save ${yearlySavings}</span>
+                            </button>
+                        </div>
+
+                        <div className="savings-banner">
+                            <TrendingDown size={16} />
+                            <span>Yearly plan saves you ${yearlySavings} compared to monthly</span>
+                        </div>
+
+                        <div className="pricing-card">
+                            <div className="price">
+                                <span className="currency">$</span>
+                                <span className="amount">
+                                    {billingInterval === 'monthly' ? monthlyPrice : monthlyEquivalent}
+                                </span>
+                                <span className="period">/month</span>
+                            </div>
+                            {billingInterval === 'yearly' && (
+                                <p className="billed-as">Billed as ${yearlyPrice}/year (${monthlyEquivalent}/mo)</p>
+                            )}
+                            <p className="price-note">Cancel anytime â€¢ No commitment â€¢ 14-day money-back</p>
+                        </div>
+
+                        <div className="features">
+                            <h3>Pro Includes:</h3>
+                            <ul>
+                                {premiumFeatures.map((feature, index) => (
+                                    <li key={index}>
+                                        <Check size={16} />
+                                        <span>{feature}</span>
+                                    </li>
+                                ))}
+                                <li>
+                                    <Zap size={16} />
+                                    <span>Priority processing (faster renders)</span>
+                                </li>
+                                <li>
+                                    <Shield size={16} />
+                                    <span>Priority email support</span>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div className="modal-actions">
+                            <Button
+                                onClick={handleUpgrade}
+                                className="upgrade-btn"
+                                disabled={isProcessing}
+                                fullWidth
+                            >
+                                {isProcessing ? (
+                                    <>
+                                        <div className="spinner-small" />
+                                        Processing...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Crown size={18} />
+                                        Upgrade to Pro - ${billingInterval === 'monthly' ? monthlyPrice : yearlyPrice}/{billingInterval === 'monthly' ? 'month' : 'year'}
+                                    </>
+                                )}
+                            </Button>
+                            <Button
+                                onClick={onClose}
+                                variant="ghost"
+                                fullWidth
+                            >
+                                Maybe later
+                            </Button>
+                        </div>
+
+                        <p className="guarantee">
+                            ðŸ”’ 14-day money-back guarantee â€¢ Secure payment via Stripe
+                        </p>
+                    </>
+                )}
+            </div>
+
+            <style>{`
+                .upgrade-modal-overlay {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(0, 0, 0, 0.8);
+                    backdrop-filter: blur(4px);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 1000;
+                    padding: 1rem;
+                }
+
+                .upgrade-modal {
+                    background: white;
+                    border-radius: 1.5rem;
+                    max-width: 550px;
+                    width: 100%;
+                    max-height: 90vh;
+                    overflow-y: auto;
+                    padding: 2rem;
+                    position: relative;
+                    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+                }
+
+                .close-btn {
+                    position: absolute;
+                    top: 1rem;
+                    right: 1rem;
+                    background: none;
+                    border: none;
+                    cursor: pointer;
+                    color: #6b7280;
+                }
+
+                .close-btn:hover {
+                    color: #1a1a1a;
+                }
+
+                .modal-header {
+                    text-align: center;
+                    margin-bottom: 1.5rem;
+                }
+
+                .crown-icon {
+                    width: 64px;
+                    height: 64px;
+                    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    margin: 0 auto 1rem;
+                    color: white;
+                }
+
+                .modal-header h2 {
+                    font-size: 1.5rem;
+                    font-weight: bold;
+                    margin: 0 0 0.5rem 0;
+                    color: #1a1a1a;
+                }
+
+                .context-message {
+                    color: #4b5563;
+                    font-size: 0.875rem;
+                    margin: 0.5rem 0;
+                }
+
+                .warning {
+                    color: #f97316;
+                    font-size: 0.875rem;
+                    margin: 0.5rem 0 0 0;
+                }
+
+                .billing-toggle {
+                    display: flex;
+                    background: #f3f4f6;
+                    border-radius: 2rem;
+                    padding: 0.25rem;
+                    margin-bottom: 1rem;
+                }
+
+                .toggle-option {
+                    flex: 1;
+                    padding: 0.75rem 1rem;
+                    border: none;
+                    background: transparent;
+                    border-radius: 1.5rem;
+                    font-size: 0.875rem;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    position: relative;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 0.25rem;
+                }
+
+                .toggle-option.active {
+                    background: white;
+                    color: #f97316;
+                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+                }
+
+                .price-tag {
+                    font-size: 0.7rem;
+                    font-weight: normal;
+                    color: #6b7280;
+                }
+
+                .toggle-option.active .price-tag {
+                    color: #f97316;
+                }
+
+                .save-badge {
+                    position: absolute;
+                    top: -10px;
+                    right: -5px;
+                    background: #22c55e;
+                    color: white;
+                    font-size: 0.6rem;
+                    font-weight: 600;
+                    padding: 0.125rem 0.375rem;
+                    border-radius: 1rem;
+                    white-space: nowrap;
+                }
+
+                .savings-banner {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 0.5rem;
+                    background: #dcfce7;
+                    color: #166534;
+                    padding: 0.5rem;
+                    border-radius: 0.5rem;
+                    font-size: 0.75rem;
+                    margin-bottom: 1rem;
+                }
+
+                .pricing-card {
+                    background: linear-gradient(135deg, #fff7ed, #ffedd5);
+                    border-radius: 1rem;
+                    padding: 1.5rem;
+                    text-align: center;
+                    margin-bottom: 1.5rem;
+                    border: 1px solid #fed7aa;
+                }
+
+                .price {
+                    display: flex;
+                    align-items: baseline;
+                    justify-content: center;
+                    gap: 0.25rem;
+                }
+
+                .currency {
+                    font-size: 1.5rem;
+                    font-weight: bold;
+                    color: #f97316;
+                }
+
+                .amount {
+                    font-size: 3rem;
+                    font-weight: bold;
+                    color: #f97316;
+                }
+
+                .period {
+                    font-size: 1rem;
+                    color: #6b7280;
+                }
+
+                .billed-as {
+                    font-size: 0.75rem;
+                    color: #6b7280;
+                    margin-top: 0.25rem;
+                }
+
+                .price-note {
+                    font-size: 0.7rem;
+                    color: #6b7280;
+                    margin-top: 0.5rem;
+                }
+
+                .features {
+                    margin-bottom: 1.5rem;
+                }
+
+                .features h3 {
+                    font-size: 1rem;
+                    font-weight: 600;
+                    margin-bottom: 0.75rem;
+                    color: #1a1a1a;
+                }
+
+                .features ul {
+                    list-style: none;
+                    padding: 0;
+                    margin: 0;
+                }
+
+                .features li {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    padding: 0.5rem 0;
+                    color: #4b5563;
+                    font-size: 0.875rem;
+                }
+
+                .features li svg {
+                    color: #22c55e;
+                    flex-shrink: 0;
+                }
+
+                .modal-actions {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0.75rem;
+                    margin-bottom: 1rem;
+                }
+
+                .upgrade-btn {
+                    background: linear-gradient(135deg, #f97316, #ea580c);
+                    color: white;
+                    border: none;
+                    padding: 0.75rem;
+                    font-weight: bold;
+                }
+
+                .upgrade-btn:hover:not(:disabled) {
+                    background: linear-gradient(135deg, #ea580c, #c2410c);
+                }
+
+                .spinner-small {
+                    width: 16px;
+                    height: 16px;
+                    border: 2px solid rgba(255, 255, 255, 0.3);
+                    border-top-color: white;
+                    border-radius: 50%;
+                    animation: spin 0.6s linear infinite;
+                    display: inline-block;
+                    margin-right: 0.5rem;
+                }
+
+                @keyframes spin {
+                    to { transform: rotate(360deg); }
+                }
+
+                .guarantee {
+                    text-align: center;
+                    font-size: 0.7rem;
+                    color: #6b7280;
+                    margin: 0;
+                }
+
+                @media (max-width: 640px) {
+                    .upgrade-modal {
+                        padding: 1.5rem;
+                    }
+                    
+                    .modal-header h2 {
+                        font-size: 1.25rem;
+                    }
+                }
+            `}</style>
+        </div>
+    );
+};
+
+export default UpgradeModal;
+
+==== FILE: C:\Users\user\Desktop\roomify\components\UpgradeToast.tsx ====
+
+// FILE: C:\Users\user\Desktop\roomify\components\UpgradeToast.tsx
+
+import { useEffect, useState } from 'react';
+import { Crown, X, Sparkles } from 'lucide-react';
+import Button from './ui/Button';
+
+interface UpgradeToastProps {
+    message: string;
+    onClose: () => void;
+    onUpgrade: () => void;
+    duration?: number;
+}
+
+const UpgradeToast = ({ message, onClose, onUpgrade, duration = 8000 }: UpgradeToastProps) => {
+    const [isVisible, setIsVisible] = useState(true);
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setIsVisible(false);
+            setTimeout(onClose, 300);
+        }, duration);
+        
+        return () => clearTimeout(timer);
+    }, [duration, onClose]);
+
+    if (!isVisible) return null;
+
+    return (
+        <div className="upgrade-toast">
+            <div className="toast-content">
+                <div className="toast-icon">
+                    <Sparkles size={20} />
+                </div>
+                <div className="toast-message">
+                    <p>{message}</p>
+                </div>
+                <Button size="sm" onClick={onUpgrade} className="toast-upgrade-btn">
+                    <Crown size={14} />
+                    Upgrade Now
+                </Button>
+                <button className="toast-close" onClick={() => {
+                    setIsVisible(false);
+                    setTimeout(onClose, 300);
+                }}>
+                    <X size={16} />
+                </button>
+            </div>
+
+            <style>{`
+                .upgrade-toast {
+                    position: fixed;
+                    bottom: 2rem;
+                    right: 2rem;
+                    z-index: 1000;
+                    animation: slideIn 0.3s ease-out;
+                }
+
+                @keyframes slideIn {
+                    from {
+                        transform: translateX(100%);
+                        opacity: 0;
+                    }
+                    to {
+                        transform: translateX(0);
+                        opacity: 1;
+                    }
+                }
+
+                @keyframes slideOut {
+                    from {
+                        transform: translateX(0);
+                        opacity: 1;
+                    }
+                    to {
+                        transform: translateX(100%);
+                        opacity: 0;
+                    }
+                }
+
+                .toast-content {
+                    display: flex;
+                    align-items: center;
+                    gap: 1rem;
+                    background: linear-gradient(135deg, #1a1a1a, #2d2d2d);
+                    border-radius: 1rem;
+                    padding: 0.75rem 1rem;
+                    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+                    border-left: 4px solid #f97316;
+                    max-width: 450px;
+                }
+
+                .toast-icon {
+                    width: 32px;
+                    height: 32px;
+                    background: rgba(249, 115, 22, 0.2);
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: #f97316;
+                }
+
+                .toast-message {
+                    flex: 1;
+                }
+
+                .toast-message p {
+                    margin: 0;
+                    font-size: 0.875rem;
+                    color: white;
+                    line-height: 1.4;
+                }
+
+                .toast-upgrade-btn {
+                    background: linear-gradient(135deg, #f97316, #ea580c);
+                    color: white;
+                    border: none;
+                    white-space: nowrap;
+                    font-size: 0.75rem;
+                    padding: 0.375rem 0.75rem;
+                }
+
+                .toast-upgrade-btn:hover {
+                    background: linear-gradient(135deg, #ea580c, #c2410c);
+                }
+
+                .toast-close {
+                    background: none;
+                    border: none;
+                    cursor: pointer;
+                    color: #9ca3af;
+                    padding: 0.25rem;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+
+                .toast-close:hover {
+                    color: white;
+                }
+
+                @media (max-width: 640px) {
+                    .upgrade-toast {
+                        bottom: 1rem;
+                        right: 1rem;
+                        left: 1rem;
+                    }
+                    
+                    .toast-content {
+                        max-width: none;
+                    }
+                    
+                    .toast-message p {
+                        font-size: 0.75rem;
+                    }
+                }
+            `}</style>
+        </div>
+    );
+};
+
+export default UpgradeToast;
+
+==== FILE: C:\Users\user\Desktop\roomify\components\Upload.tsx ====
+
+// FILE: C:\Users\user\Desktop\roomify\components\Upload.tsx
+
+import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { useOutletContext } from "react-router";
+import { CheckCircle2, ImageIcon, UploadIcon, Lock } from "lucide-react";
+import { PROGRESS_INCREMENT, REDIRECT_DELAY_MS, PROGRESS_INTERVAL_MS } from "../lib/constants";
+import { checkRenderLimit, incrementRenderCount, getRemainingUsage } from "../lib/usage.tracker";
+import UpgradeModal from './UpgradeModal';
+import EmailCaptureModal from './EmailCaptureModal';
+import { analytics } from '../lib/analytics';
+
+interface UploadProps {
+    onComplete?: (base64Data: string) => void;
+}
+
+const Upload = ({ onComplete }: UploadProps) => {
+    const [file, setFile] = useState<File | null>(null);
+    const [isDragging, setIsDragging] = useState(false);
+    const [progress, setProgress] = useState(0);
+    const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+    const [showEmailCapture, setShowEmailCapture] = useState(false);
+    const [usageInfo, setUsageInfo] = useState<{ remaining: number; isPremium: boolean } | null>(null);
+    const intervalRef = useRef<NodeJS.Timeout | null>(null);
+    const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const [pendingFile, setPendingFile] = useState<File | null>(null);
+
+    const { isSignedIn, userId } = useOutletContext<AuthContext>();
+
+    useEffect(() => {
+        const loadUsageInfo = async () => {
+            if (isSignedIn && userId) {
+                const usage = await getRemainingUsage(userId);
+                setUsageInfo({
+                    remaining: usage.rendersRemaining === Infinity ? -1 : usage.rendersRemaining,
+                    isPremium: usage.isPremium
+                });
+            }
+        };
+        loadUsageInfo();
+    }, [isSignedIn, userId]);
+
+    useEffect(() => {
+        return () => {
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+                intervalRef.current = null;
+            }
+            if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current);
+                timeoutRef.current = null;
+            }
+        };
+    }, []);
+
+    const processFile = useCallback(async (file: File) => {
+        // Track upload attempt
+        analytics.featureUsed('upload_attempt');
+        analytics.click('upload_button');
+        
+        // Check if user has email captured
+        const hasEmail = localStorage.getItem('roomify_captured_email');
+        
+        if (!hasEmail && !isSignedIn) {
+            setPendingFile(file);
+            setShowEmailCapture(true);
+            analytics.dropOff('email_capture_required');
+            return;
+        }
+        
+        if (!isSignedIn) {
+            alert('Please sign in to upload floor plans');
+            analytics.dropOff('sign_in_required');
+            return;
+        }
+
+        if (!userId) return;
+
+        const limitCheck = await checkRenderLimit(userId);
+        
+        if (!limitCheck.allowed) {
+            setShowUpgradeModal(true);
+            analytics.dropOff('render_limit_reached');
+            return;
+        }
+
+        setFile(file);
+        setProgress(0);
+
+        const reader = new FileReader();
+        reader.onerror = () => {
+            setFile(null);
+            setProgress(0);
+            analytics.error('file_read_error');
+        };
+        reader.onloadend = async () => {
+            const base64Data = reader.result as string;
+
+            await incrementRenderCount(userId);
+            
+            const usage = await getRemainingUsage(userId);
+            setUsageInfo({
+                remaining: usage.rendersRemaining === Infinity ? -1 : usage.rendersRemaining,
+                isPremium: usage.isPremium
+            });
+
+            // Track successful upload
+            analytics.conversion('upload_complete');
+
+            intervalRef.current = setInterval(() => {
+                setProgress((prev) => {
+                    const next = prev + PROGRESS_INCREMENT;
+                    if (next >= 100) {
+                        if (intervalRef.current) {
+                            clearInterval(intervalRef.current);
+                            intervalRef.current = null;
+                        }
+                        timeoutRef.current = setTimeout(() => {
+                            onComplete?.(base64Data);
+                            timeoutRef.current = null;
+                        }, REDIRECT_DELAY_MS);
+                        return 100;
+                    }
+                    return next;
+                });
+            }, PROGRESS_INTERVAL_MS);
+        };
+        reader.readAsDataURL(file);
+    }, [isSignedIn, userId, onComplete]);
+
+    const handleEmailCaptureSuccess = (email: string) => {
+        console.log('Email captured:', email);
+        setShowEmailCapture(false);
+        analytics.conversion('email_captured');
+        if (pendingFile) {
+            processFile(pendingFile);
+            setPendingFile(null);
+        }
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        if (!isSignedIn) return;
+        setIsDragging(true);
+        analytics.click('drag_over');
+    };
+
+    const handleDragLeave = () => {
+        setIsDragging(false);
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+
+        if (!isSignedIn) {
+            alert('Please sign in to upload floor plans');
+            analytics.dropOff('drop_without_signin');
+            return;
+        }
+
+        const droppedFile = e.dataTransfer.files[0];
+        const allowedTypes = ['image/jpeg', 'image/png'];
+        if (droppedFile && allowedTypes.includes(droppedFile.type)) {
+            analytics.featureUsed('drag_drop_upload');
+            processFile(droppedFile);
+        } else {
+            alert('Please upload JPG or PNG files only');
+            analytics.error('invalid_file_type');
+        }
+    };
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!isSignedIn) {
+            alert('Please sign in to upload floor plans');
+            analytics.dropOff('click_upload_without_signin');
+            return;
+        }
+
+        const selectedFile = e.target.files?.[0];
+        if (selectedFile) {
+            const allowedTypes = ['image/jpeg', 'image/png'];
+            if (allowedTypes.includes(selectedFile.type)) {
+                processFile(selectedFile);
+            } else {
+                alert('Please upload JPG or PNG files only');
+                analytics.error('invalid_file_type_selected');
+            }
+        }
+    };
+
+    const hasReachedLimit = usageInfo && usageInfo.remaining === 0 && !usageInfo.isPremium;
+
+    return (
+        <>
+            <div className="upload">
+                {!file ? (
+                    <div
+                        className={`dropzone ${isDragging ? 'is-dragging' : ''} ${hasReachedLimit ? 'limit-reached' : ''}`}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                    >
+                        <input
+                            type="file"
+                            className="drop-input"
+                            accept=".jpg,.jpeg,.png,.webp"
+                            disabled={!isSignedIn || hasReachedLimit}
+                            onChange={handleChange}
+                        />
+
+                        <div className="drop-content">
+                            <div className="drop-icon">
+                                {hasReachedLimit ? <Lock size={20} /> : <UploadIcon size={20} />}
+                            </div>
+                            <p>
+                                {!isSignedIn ? (
+                                    "Sign in or sign up with Puter to upload"
+                                ) : hasReachedLimit ? (
+                                    <>You've used all free renders. <button onClick={() => setShowUpgradeModal(true)} className="upgrade-link">Upgrade to Pro</button></>
+                                ) : (
+                                    "Click to upload or just drag and drop"
+                                )}
+                            </p>
+                            <p className="help">
+                                Maximum file size 50 MB. JPG/PNG only.
+                                {isSignedIn && usageInfo && usageInfo.remaining > 0 && !usageInfo.isPremium && (
+                                    <span className="usage-info">
+                                        {" "}â€¢ {usageInfo.remaining} render{usageInfo.remaining !== 1 ? 's' : ''} left this month
+                                    </span>
+                                )}
+                                {isSignedIn && usageInfo?.isPremium && (
+                                    <span className="premium-info">
+                                        {" "}â€¢ â™¾ï¸ Unlimited renders (Pro)
+                                    </span>
+                                )}
+                            </p>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="upload-status">
+                        <div className="status-content">
+                            <div className="status-icon">
+                                {progress === 100 ? (
+                                    <CheckCircle2 className="check" />
+                                ) : (
+                                    <ImageIcon className="image" />
+                                )}
+                            </div>
+
+                            <h3>{file.name}</h3>
+
+                            <div className='progress'>
+                                <div className="bar" style={{ width: `${progress}%` }} />
+
+                                <p className="status-text">
+                                    {progress < 100 ? 'Analyzing Floor Plan...' : 'Redirecting...'}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            <UpgradeModal 
+                isOpen={showUpgradeModal}
+                onClose={() => setShowUpgradeModal(false)}
+                featureName="renders"
+                remaining={usageInfo?.remaining === -1 ? undefined : usageInfo?.remaining}
+            />
+
+            <EmailCaptureModal 
+                isOpen={showEmailCapture}
+                onClose={() => {
+                    setShowEmailCapture(false);
+                    setPendingFile(null);
+                }}
+                onSuccess={handleEmailCaptureSuccess}
+                triggerReason="create_project"
+            />
+
+            <style>{`
+                .upgrade-link {
+                    color: #f97316;
+                    text-decoration: underline;
+                    cursor: pointer;
+                    font-weight: 500;
+                }
+                
+                .upgrade-link:hover {
+                    color: #ea580c;
+                }
+                
+                .usage-info {
+                    color: #22c55e;
+                    font-weight: 500;
+                }
+                
+                .premium-info {
+                    color: #f97316;
+                    font-weight: 500;
+                }
+                
+                .dropzone.limit-reached {
+                    opacity: 0.7;
+                    cursor: not-allowed;
+                }
+                
+                .dropzone.limit-reached .drop-icon {
+                    background: #fee2e2;
+                    color: #ef4444;
+                }
+            `}</style>
+        </>
+    )
+}
+
+export default Upload
+
+==== FILE: C:\Users\user\Desktop\roomify\components\ui\Button.tsx ====
+
+import { type ButtonHTMLAttributes } from 'react';
+
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: 'primary' | 'secondary' | 'ghost' | 'outline';
+  size?: 'sm' | 'md' | 'lg';
+  fullWidth?: boolean;
+}
+
+const Button = ({
+  variant = 'primary',
+  size = 'md',
+  fullWidth = false,
+  className = '',
+  children,
+  ...props
+}: ButtonProps) => {
+  const baseClass = 'btn';
+  const variantClass = `btn--${variant}`;
+  const sizeClass = `btn--${size}`;
+  const fullWidthClass = fullWidth ? 'btn--full' : '';
+
+  const combinedClasses = [
+    baseClass,
+    variantClass,
+    sizeClass,
+    fullWidthClass,
+    className
+  ].filter(Boolean).join(' ');
+
+  return (
+    <button className={combinedClasses} {...props}>
+      {children}
+    </button>
+  );
+};
+
+export default Button;

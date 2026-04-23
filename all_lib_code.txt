@@ -1,0 +1,3672 @@
+﻿
+==== FILE: C:\Users\user\Desktop\roomify\lib\ai.action.ts ====
+
+// FILE: C:\Users\user\Desktop\roomify\lib\ai.action.ts
+
+import puter from "@heyputer/puter.js";
+import { getStylePromptWithPreset, type DesignStyle } from "./constants";
+import type { PresetCategory } from "./presets";
+
+export const compressImage = async (dataUrl: string, maxSizeMB: number = 5): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+            
+            const maxDimension = 1024;
+            if (width > maxDimension || height > maxDimension) {
+                if (width > height) {
+                    height = (height * maxDimension) / width;
+                    width = maxDimension;
+                } else {
+                    width = (width * maxDimension) / height;
+                    height = maxDimension;
+                }
+            }
+            
+            canvas.width = width;
+            canvas.height = height;
+            
+            const ctx = canvas.getContext('2d');
+            ctx?.drawImage(img, 0, 0, width, height);
+            
+            let quality = 0.8;
+            const tryCompression = (currentQuality: number) => {
+                const compressedDataUrl = canvas.toDataURL('image/jpeg', currentQuality);
+                const sizeInMB = (compressedDataUrl.length * 0.75) / (1024 * 1024);
+                
+                if (sizeInMB <= maxSizeMB || currentQuality <= 0.3) {
+                    resolve(compressedDataUrl);
+                } else {
+                    tryCompression(currentQuality - 0.1);
+                }
+            };
+            
+            tryCompression(quality);
+        };
+        
+        img.onerror = reject;
+        img.src = dataUrl;
+    });
+};
+
+export const fetchAsDataUrl = async (url: string): Promise<string> => {
+    try {
+        if (url.includes('.puter.site')) {
+            const response = await fetch(url, {
+                mode: 'cors',
+                credentials: 'omit'
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Failed to fetch image: ${response.statusText}`);
+            }
+            
+            const blob = await response.blob();
+            
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
+        
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch image: ${response.statusText}`);
+        }
+        
+        const blob = await response.blob();
+        
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+    } catch (error) {
+        console.error('Error fetching image:', error);
+        throw error;
+    }
+};
+
+export const generate3DView = async ({ 
+    sourceImage, 
+    style = 'modern',
+    preset = 'budget'
+}: Generate3DViewParams & { style?: DesignStyle; preset?: PresetCategory }) => {
+    try {
+        let dataUrl = sourceImage;
+        
+        if (!sourceImage.startsWith('data:')) {
+            console.log('Converting image to data URL...');
+            dataUrl = await fetchAsDataUrl(sourceImage);
+        }
+        
+        console.log('Compressing image...');
+        const compressedDataUrl = await compressImage(dataUrl, 4);
+        console.log('Image compressed successfully');
+        
+        const base64Data = compressedDataUrl.split(',')[1];
+        
+        if (!base64Data) {
+            throw new Error('Invalid source image payload');
+        }
+        
+        const stylePrompt = getStylePromptWithPreset(style, preset);
+        console.log(`Generating with ${style} style and ${preset} preset...`);
+        
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('AI generation timeout after 60 seconds')), 60000);
+        });
+        
+        const aiPromise = puter.ai.txt2img(stylePrompt, {
+            model: "gpt-image-1-mini",
+            input_image: base64Data,
+            input_image_mime_type: "image/jpeg",
+            ratio: { w: 1024, h: 1024 },
+        });
+        
+        const response = await Promise.race([aiPromise, timeoutPromise]);
+        
+        console.log('AI Response received');
+        
+        let rawImageUrl: string | null = null;
+        
+        if (typeof response === 'string') {
+            rawImageUrl = response;
+        } else if (response instanceof HTMLImageElement) {
+            rawImageUrl = response.src;
+        } else if (response && typeof response === 'object') {
+            rawImageUrl = (response as any).src || 
+                         (response as any).image || 
+                         (response as any).url ||
+                         (response as any).output;
+            
+            if (!rawImageUrl && (response as any).blob instanceof Blob) {
+                const blob = (response as any).blob;
+                rawImageUrl = await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result as string);
+                    reader.readAsDataURL(blob);
+                });
+            }
+        }
+        
+        if (!rawImageUrl) {
+            console.error('No image URL in response:', response);
+            throw new Error('No image generated by AI');
+        }
+        
+        const renderedImage = rawImageUrl.startsWith('data:') 
+            ? rawImageUrl 
+            : await fetchAsDataUrl(rawImageUrl);
+        
+        return { renderedImage, renderedPath: undefined, style, preset };
+    } catch (error) {
+        console.error('AI generation error:', error);
+        
+        if (error instanceof Error) {
+            if (error.message.includes('timeout')) {
+                throw new Error('AI generation timed out. Please try again.');
+            } else if (error.message.includes('funding') || error.message.includes('balance')) {
+                throw new Error('API requires payment. Please check your Puter.ai account balance.');
+            }
+        }
+        
+        throw error;
+    }
+};
+
+==== FILE: C:\Users\user\Desktop\roomify\lib\analytics.ts ====
+
+// FILE: C:\Users\user\Desktop\roomify\lib\analytics.ts
+
+type EventProperties = Record<string, string | number | boolean | undefined>;
+
+interface EventData {
+    name: string;
+    properties?: EventProperties;
+    timestamp: string;
+    userId?: string;
+    sessionId: string;
+}
+
+class Analytics {
+    private sessionId: string;
+    private userId: string | null = null;
+    private isEnabled: boolean = true;
+    private eventQueue: EventData[] = [];
+    private flushInterval: NodeJS.Timeout | null = null;
+    private isBrowser: boolean;
+
+    constructor() {
+        // Check if we're in browser environment
+        this.isBrowser = typeof window !== 'undefined' && typeof sessionStorage !== 'undefined';
+        
+        if (this.isBrowser) {
+            // Generate or retrieve session ID
+            let sessionId = sessionStorage.getItem('roomify_session_id');
+            if (!sessionId) {
+                sessionId = this.generateId();
+                sessionStorage.setItem('roomify_session_id', sessionId);
+            }
+            this.sessionId = sessionId;
+            
+            // Set up periodic flushing
+            this.flushInterval = setInterval(() => this.flush(), 30000); // Flush every 30 seconds
+            
+            // Flush on page unload
+            window.addEventListener('beforeunload', () => this.flush());
+            
+            // Check if tracking is enabled
+            const trackingEnabled = localStorage.getItem('roomify_tracking_enabled');
+            if (trackingEnabled === 'false') {
+                this.isEnabled = false;
+            }
+        } else {
+            // SSR fallback
+            this.sessionId = 'server-side';
+        }
+    }
+
+    private generateId(): string {
+        return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+    }
+
+    public setUserId(userId: string | null) {
+        this.userId = userId;
+        if (userId && this.isBrowser) {
+            this.track('user_identified', { userId });
+        }
+    }
+
+    public enable() {
+        if (!this.isBrowser) return;
+        this.isEnabled = true;
+        localStorage.setItem('roomify_tracking_enabled', 'true');
+        this.track('tracking_enabled');
+    }
+
+    public disable() {
+        if (!this.isBrowser) return;
+        this.isEnabled = false;
+        localStorage.setItem('roomify_tracking_enabled', 'false');
+        this.track('tracking_disabled');
+        this.flush();
+    }
+
+    public track(eventName: string, properties?: EventProperties) {
+        if (!this.isBrowser || !this.isEnabled) return;
+        
+        const eventData: EventData = {
+            name: eventName,
+            properties,
+            timestamp: new Date().toISOString(),
+            userId: this.userId || undefined,
+            sessionId: this.sessionId
+        };
+        
+        this.eventQueue.push(eventData);
+        
+        // Flush immediately for important events
+        if (this.shouldFlushImmediately(eventName)) {
+            this.flush();
+        }
+        
+        // Also log to console in development
+        if (process.env.NODE_ENV === 'development') {
+            console.log('[Analytics]', eventName, properties);
+        }
+    }
+
+    private shouldFlushImmediately(eventName: string): boolean {
+        const importantEvents = [
+            'sign_up',
+            'upgrade_click',
+            'purchase',
+            'error',
+            'render_generation',
+            'export_png',
+            'export_pdf'
+        ];
+        return importantEvents.includes(eventName);
+    }
+
+    private async flush() {
+        if (!this.isBrowser || this.eventQueue.length === 0) return;
+        
+        const events = [...this.eventQueue];
+        this.eventQueue = [];
+        
+        // Store locally
+        this.storeLocally(events);
+        
+        // If you have a backend endpoint, uncomment this:
+        // try {
+        //     await fetch('/api/analytics/track', {
+        //         method: 'POST',
+        //         headers: { 'Content-Type': 'application/json' },
+        //         body: JSON.stringify({ events })
+        //     });
+        // } catch (error) {
+        //     console.error('Failed to send analytics:', error);
+        //     this.eventQueue = [...events, ...this.eventQueue];
+        // }
+    }
+
+    private storeLocally(events: EventData[]) {
+        if (!this.isBrowser) return;
+        
+        const stored = localStorage.getItem('roomify_analytics_events');
+        let allEvents: EventData[] = stored ? JSON.parse(stored) : [];
+        allEvents = [...allEvents, ...events];
+        
+        // Keep only last 1000 events
+        if (allEvents.length > 1000) {
+            allEvents = allEvents.slice(-1000);
+        }
+        
+        localStorage.setItem('roomify_analytics_events', JSON.stringify(allEvents));
+    }
+
+    public getEvents(): EventData[] {
+        if (!this.isBrowser) return [];
+        
+        const stored = localStorage.getItem('roomify_analytics_events');
+        return stored ? JSON.parse(stored) : [];
+    }
+
+    public clearEvents() {
+        if (!this.isBrowser) return;
+        localStorage.removeItem('roomify_analytics_events');
+        this.track('analytics_cleared');
+    }
+
+    // Page tracking
+    public pageView(page: string, properties?: EventProperties) {
+        this.track('page_view', { page, ...properties });
+    }
+
+    // User actions
+    public click(element: string, properties?: EventProperties) {
+        this.track('click', { element, ...properties });
+    }
+
+    // Feature usage
+    public featureUsed(feature: string, properties?: EventProperties) {
+        this.track('feature_used', { feature, ...properties });
+    }
+
+    // Errors
+    public error(error: string, properties?: EventProperties) {
+        this.track('error', { error, ...properties });
+    }
+
+    // Conversion events
+    public conversion(step: string, properties?: EventProperties) {
+        this.track('conversion', { step, ...properties });
+    }
+
+    // Drop-off tracking
+    public dropOff(point: string, properties?: EventProperties) {
+        this.track('drop_off', { point, ...properties });
+    }
+}
+
+// Singleton instance - only create in browser environment
+export const analytics = new Analytics();
+
+// Helper to track page views with React Router
+export const trackPageView = (pathname: string) => {
+    if (typeof window !== 'undefined') {
+        analytics.pageView(pathname);
+    }
+};
+
+// Helper to track time on page
+export const trackTimeOnPage = () => {
+    if (typeof window === 'undefined') return () => {};
+    
+    const startTime = Date.now();
+    return () => {
+        const timeSpent = Math.floor((Date.now() - startTime) / 1000);
+        analytics.track('time_on_page', { seconds: timeSpent });
+    };
+};
+
+==== FILE: C:\Users\user\Desktop\roomify\lib\constants.ts ====
+
+// FILE: C:\Users\user\Desktop\roomify\lib\constants.ts
+
+export const PUTER_WORKER_URL = import.meta.env.VITE_PUTER_WORKER_URL || "";
+
+// Storage Paths
+export const STORAGE_PATHS = {
+    ROOT: "roomify",
+    SOURCES: "roomify/sources",
+    RENDERS: "roomify/renders",
+} as const;
+
+// Timing Constants (in milliseconds)
+export const SHARE_STATUS_RESET_DELAY_MS = 1500;
+export const PROGRESS_INCREMENT = 15;
+export const REDIRECT_DELAY_MS = 600;
+export const PROGRESS_INTERVAL_MS = 100;
+export const PROGRESS_STEP = 5;
+
+// UI Constants
+export const GRID_OVERLAY_SIZE = "60px 60px";
+export const GRID_COLOR = "#3B82F6";
+
+// HTTP Status Codes
+export const UNAUTHORIZED_STATUSES = [401, 403];
+
+// Image Dimensions
+export const IMAGE_RENDER_DIMENSION = 1024;
+
+// Style Types
+export type DesignStyle = 'modern' | 'rustic' | 'industrial' | 'scandinavian' | 'bohemian';
+
+export const STYLE_OPTIONS: { id: DesignStyle; name: string; icon: string; description: string }[] = [
+    {
+        id: 'modern',
+        name: 'Modern',
+        icon: 'ðŸ¢',
+        description: 'Clean lines, minimal decor, neutral colors'
+    },
+    {
+        id: 'rustic',
+        name: 'Rustic',
+        icon: 'ðŸ¡',
+        description: 'Wood textures, warm tones, natural materials'
+    },
+    {
+        id: 'industrial',
+        name: 'Industrial',
+        icon: 'ðŸ­',
+        description: 'Exposed brick, metal accents, urban loft style'
+    },
+    {
+        id: 'scandinavian',
+        name: 'Scandinavian',
+        icon: 'â„ï¸',
+        description: 'Light wood, bright spaces, hygge-inspired'
+    },
+    {
+        id: 'bohemian',
+        name: 'Bohemian',
+        icon: 'ðŸŒ¿',
+        description: 'Eclectic patterns, plants, artistic vibes'
+    }
+];
+
+// Base prompt template
+const BASE_RENDER_PROMPT = `
+TASK: Convert the input 2D floor plan into a **photorealistic, top-down 3D architectural render**.
+
+STRICT REQUIREMENTS (do not violate):
+1) **REMOVE ALL TEXT**: Do not render any letters, numbers, labels, dimensions, or annotations. Floors must be continuous where text used to be.
+2) **GEOMETRY MUST MATCH**: Walls, rooms, doors, and windows must follow the exact lines and positions in the plan. Do not shift or resize.
+3) **TOP-DOWN ONLY**: Orthographic top-down view. No perspective tilt.
+4) **CLEAN, REALISTIC OUTPUT**: Crisp edges, balanced lighting, and realistic materials. No sketch/hand-drawn look.
+5) **NO EXTRA CONTENT**: Do not add rooms, furniture, or objects that are not clearly indicated by the plan.
+
+STRUCTURE & DETAILS:
+- **Walls**: Extrude precisely from the plan lines. Consistent wall height and thickness.
+- **Doors**: Convert door swing arcs into open doors, aligned to the plan.
+- **Windows**: Convert thin perimeter lines into realistic glass windows.
+
+FURNITURE & ROOM MAPPING (only where icons/fixtures are clearly shown):
+- Bed icon â†’ realistic bed with duvet and pillows.
+- Sofa icon â†’ modern sectional or sofa.
+- Dining table icon â†’ table with chairs.
+- Kitchen icon â†’ counters with sink and stove.
+- Bathroom icon â†’ toilet, sink, and tub/shower.
+- Office/study icon â†’ desk, chair, and minimal shelving.
+- Porch/patio/balcony icon â†’ outdoor seating or simple furniture (keep minimal).
+- Utility/laundry icon â†’ washer/dryer and minimal cabinetry.
+
+STYLE REQUIREMENTS:
+`;
+
+// Style-specific prompts
+export const STYLE_PROMPTS: Record<DesignStyle, string> = {
+    modern: `
+MODERN STYLE:
+- Materials: Smooth surfaces, glass, steel, polished concrete
+- Colors: Neutral palette (whites, grays, blacks) with bold accent colors
+- Furniture: Minimalist, geometric shapes, sleek finishes
+- Lighting: Clean, bright, even illumination with subtle shadows
+- Decor: Minimal decorative elements, focus on clean lines
+- Flooring: Polished concrete, large format tiles, light hardwood
+    `.trim(),
+
+    rustic: `
+RUSTIC STYLE:
+- Materials: Natural wood, stone, exposed beams, wrought iron
+- Colors: Warm earth tones (browns, beiges, deep greens)
+- Furniture: Farmhouse style, distressed finishes, comfortable pieces
+- Lighting: Warm, cozy illumination, pendant lights, sconces
+- Decor: Vintage accessories, woven textiles, fireplace emphasis
+- Flooring: Wide plank hardwood, natural stone, hand-scraped finishes
+    `.trim(),
+
+    industrial: `
+INDUSTRIAL STYLE:
+- Materials: Exposed brick, concrete, metal pipes, reclaimed wood
+- Colors: Dark neutrals (charcoal, black, gray) with warm metallic accents
+- Furniture: Utilitarian, metal frames, leather upholstery, exposed hardware
+- Lighting: Edison bulbs, track lighting, metal shades, dramatic shadows
+- Decor: Minimal, functional, warehouse aesthetic
+- Flooring: Polished concrete, distressed wood, epoxy finishes
+    `.trim(),
+
+    scandinavian: `
+SCANDINAVIAN STYLE:
+- Materials: Light woods (birch, oak, pine), wool, leather, ceramics
+- Colors: White, light gray, pastel accents, muted tones
+- Furniture: Functional, simple forms, tapered legs, organic shapes
+- Lighting: Soft, diffused, natural light maximized, simple pendant fixtures
+- Decor: Hygge elements (candles, throws), plants, minimalist art
+- Flooring: Light wood floors, white-washed, large windows
+    `.trim(),
+
+    bohemian: `
+BOHEMIAN STYLE:
+- Materials: Natural fibers (rattan, jute, macrame), velvet, wood
+- Colors: Rich jewel tones, warm earth colors, eclectic patterns
+- Furniture: Mix of vintage and global pieces, low seating, floor cushions
+- Lighting: Warm ambient, string lights, lanterns, stained glass
+- Decor: Plants everywhere, tapestries, patterned rugs, collected objects
+- Flooring: Layered rugs, patterned tiles, natural wood
+    `.trim()
+};
+
+export const ROOMIFY_RENDER_PROMPT = `${BASE_RENDER_PROMPT}\n${STYLE_PROMPTS.modern}`.trim();
+
+export const getStylePrompt = (style: DesignStyle): string => {
+    return `${BASE_RENDER_PROMPT}\n${STYLE_PROMPTS[style]}`.trim();
+};
+
+export const getStyleName = (styleId: DesignStyle): string => {
+    const style = STYLE_OPTIONS.find(s => s.id === styleId);
+    return style?.name || styleId;
+};
+
+export const getStyleIcon = (styleId: DesignStyle): string => {
+    const style = STYLE_OPTIONS.find(s => s.id === styleId);
+    return style?.icon || 'ðŸŽ¨';
+};
+
+export const getStyleDescription = (styleId: DesignStyle): string => {
+    const style = STYLE_OPTIONS.find(s => s.id === styleId);
+    return style?.description || '';
+};
+
+// Import presets for combined prompts
+import { DESIGN_PRESETS, type PresetCategory } from './presets';
+
+export type { PresetCategory };
+export { DESIGN_PRESETS };
+
+export const getStylePromptWithPreset = (style: DesignStyle, presetId: PresetCategory): string => {
+    const preset = DESIGN_PRESETS.find(p => p.id === presetId);
+    const basePrompt = getStylePrompt(style);
+    
+    if (!preset) return basePrompt;
+    
+    return `${basePrompt}\n\nADDITIONAL PRESET REQUIREMENTS (${preset.name}):\n${preset.promptAdditions}`;
+};
+
+==== FILE: C:\Users\user\Desktop\roomify\lib\pdf.export.ts ====
+
+// FILE: C:\Users\user\Desktop\roomify\lib\pdf.export.ts
+
+import jsPDF from 'jspdf';
+
+interface PDFExportOptions {
+    title: string;
+    beforeImage: string;
+    afterImage: string;
+    styleName: string;
+    date: string;
+    projectId: string;
+}
+
+export const exportToPDF = async (options: PDFExportOptions): Promise<void> => {
+    const { title, beforeImage, afterImage, styleName, date, projectId } = options;
+    
+    return new Promise((resolve, reject) => {
+        try {
+            // Create PDF in landscape mode
+            const pdf = new jsPDF({
+                orientation: 'landscape',
+                unit: 'mm',
+                format: 'a4'
+            });
+            
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const pageHeight = pdf.internal.pageSize.getHeight();
+            
+            // Add decorative header line
+            pdf.setFillColor(249, 115, 22); // Primary color
+            pdf.rect(0, 0, pageWidth, 8, 'F');
+            
+            // Add title
+            pdf.setFontSize(24);
+            pdf.setFont('helvetica', 'bold');
+            pdf.setTextColor(249, 115, 22);
+            pdf.text(title, pageWidth / 2, 25, { align: 'center' });
+            
+            // Add subtitle
+            pdf.setFontSize(11);
+            pdf.setFont('helvetica', 'normal');
+            pdf.setTextColor(100, 100, 100);
+            pdf.text(`Design Style: ${styleName}`, pageWidth / 2, 35, { align: 'center' });
+            pdf.text(`Generated: ${date}`, pageWidth / 2, 42, { align: 'center' });
+            pdf.text(`Project ID: ${projectId}`, pageWidth / 2, 49, { align: 'center' });
+            
+            // Add "Before" label
+            pdf.setFontSize(13);
+            pdf.setFont('helvetica', 'bold');
+            pdf.setTextColor(0, 0, 0);
+            pdf.text('ORIGINAL FLOOR PLAN', pageWidth / 4, 62, { align: 'center' });
+            
+            // Add "After" label
+            pdf.text('AI GENERATED 3D RENDER', (pageWidth * 3) / 4, 62, { align: 'center' });
+            
+            // Add style badge
+            pdf.setFillColor(249, 115, 22);
+            pdf.setDrawColor(249, 115, 22);
+            pdf.roundedRect(pageWidth - 35, 8, 30, 8, 2, 2, 'F');
+            pdf.setFontSize(8);
+            pdf.setFont('helvetica', 'bold');
+            pdf.setTextColor(255, 255, 255);
+            pdf.text(styleName.toUpperCase(), pageWidth - 20, 14, { align: 'center' });
+            
+            // Load and add images
+            const loadImage = (src: string): Promise<HTMLImageElement> => {
+                return new Promise((resolveImg, rejectImg) => {
+                    const img = new Image();
+                    img.crossOrigin = 'anonymous';
+                    img.onload = () => resolveImg(img);
+                    img.onerror = () => rejectImg(new Error(`Failed to load image: ${src.substring(0, 50)}...`));
+                    img.src = src;
+                });
+            };
+            
+            Promise.all([
+                loadImage(beforeImage),
+                loadImage(afterImage)
+            ]).then(([beforeImg, afterImg]) => {
+                // Calculate image dimensions
+                const imageWidth = pageWidth * 0.38;
+                const beforeHeight = (beforeImg.height * imageWidth) / beforeImg.width;
+                const afterHeight = (afterImg.height * imageWidth) / afterImg.width;
+                
+                const imageY = 72;
+                const maxHeight = pageHeight - imageY - 35;
+                
+                const finalBeforeHeight = Math.min(beforeHeight, maxHeight);
+                const finalAfterHeight = Math.min(afterHeight, maxHeight);
+                
+                // Add before image (left side) with border
+                pdf.setDrawColor(200, 200, 200);
+                pdf.setFillColor(255, 255, 255);
+                pdf.roundedRect(
+                    pageWidth / 4 - imageWidth / 2 - 2,
+                    imageY - 2,
+                    imageWidth + 4,
+                    finalBeforeHeight + 4,
+                    2,
+                    2,
+                    'FD'
+                );
+                
+                pdf.addImage(
+                    beforeImg,
+                    'JPEG',
+                    pageWidth / 4 - imageWidth / 2,
+                    imageY,
+                    imageWidth,
+                    finalBeforeHeight
+                );
+                
+                // Add after image (right side) with border
+                pdf.roundedRect(
+                    (pageWidth * 3) / 4 - imageWidth / 2 - 2,
+                    imageY - 2,
+                    imageWidth + 4,
+                    finalAfterHeight + 4,
+                    2,
+                    2,
+                    'FD'
+                );
+                
+                pdf.addImage(
+                    afterImg,
+                    'JPEG',
+                    (pageWidth * 3) / 4 - imageWidth / 2,
+                    imageY,
+                    imageWidth,
+                    finalAfterHeight
+                );
+                
+                // Add comparison slider hint
+                pdf.setFontSize(8);
+                pdf.setFont('helvetica', 'italic');
+                pdf.setTextColor(150, 150, 150);
+                pdf.text(
+                    'Compare the original floor plan with the AI-generated 3D visualization',
+                    pageWidth / 2,
+                    pageHeight - 22,
+                    { align: 'center' }
+                );
+                
+                // Add footer with decorative line
+                pdf.setDrawColor(249, 115, 22);
+                pdf.setLineWidth(0.5);
+                pdf.line(20, pageHeight - 18, pageWidth - 20, pageHeight - 18);
+                
+                pdf.setFontSize(9);
+                pdf.setFont('helvetica', 'normal');
+                pdf.setTextColor(150, 150, 150);
+                pdf.text(
+                    'Generated by Roomify - AI Architectural Visualization Tool',
+                    pageWidth / 2,
+                    pageHeight - 10,
+                    { align: 'center' }
+                );
+                
+                // Add page number
+                pdf.text(
+                    'Page 1',
+                    pageWidth - 20,
+                    pageHeight - 10,
+                    { align: 'right' }
+                );
+                
+                // Save the PDF
+                pdf.save(`roomify-${projectId}-${styleName.toLowerCase().replace(/\s+/g, '-')}.pdf`);
+                resolve();
+            }).catch((error) => {
+                console.error('Image loading error:', error);
+                reject(new Error('Failed to load images for PDF export'));
+            });
+        } catch (error) {
+            console.error('PDF generation error:', error);
+            reject(error);
+        }
+    });
+};
+
+==== FILE: C:\Users\user\Desktop\roomify\lib\presets.ts ====
+
+// FILE: C:\Users\user\Desktop\roomify\lib\presets.ts
+
+export type PresetCategory = 'luxury' | 'budget' | 'minimalist' | 'eclectic' | 'traditional';
+
+export interface DesignPreset {
+    id: PresetCategory;
+    name: string;
+    icon: string;
+    description: string;
+    priceTier: 'free' | 'premium';
+    colors: {
+        primary: string;
+        secondary: string;
+        accent: string;
+        walls: string;
+        floor: string;
+    };
+    furniture: {
+        style: string;
+        pieces: string[];
+        materials: string[];
+    };
+    lighting: string;
+    decor: string[];
+    promptAdditions: string;
+}
+
+export const DESIGN_PRESETS: DesignPreset[] = [
+    {
+        id: 'luxury',
+        name: 'Luxury Estate',
+        icon: 'ðŸ’Ž',
+        description: 'High-end finishes, marble, gold accents, premium furniture',
+        priceTier: 'premium',
+        colors: {
+            primary: '#C6A43F', // Gold
+            secondary: '#2C2C2C', // Dark charcoal
+            accent: '#8B0000', // Deep burgundy
+            walls: '#F5F0E8', // Cream
+            floor: '#8B7355' // Dark walnut
+        },
+        furniture: {
+            style: 'Contemporary Luxury',
+            pieces: ['Designer sofa', 'Marble coffee table', 'Velvet armchairs', 'Crystal chandelier'],
+            materials: ['Marble', 'Velvet', 'Brass', 'Crystal', 'Leather']
+        },
+        lighting: 'Dramatic with statement chandeliers and hidden LED strips',
+        decor: ['Large abstract art', 'Fresh flowers', 'Sculptural vases', 'Designer rugs'],
+        promptAdditions: `
+- PREMIUM LUXURY STYLE:
+- Use high-end materials: marble, gold accents, crystal, velvet, polished brass
+- Furniture: Designer pieces, tufted upholstery, sleek modern shapes
+- Lighting: Elegant chandeliers, sconces, dramatic spotlights
+- Colors: Rich jewel tones, metallics, deep warm neutrals
+- Add decorative elements: fresh flowers, art pieces, sculptural objects
+- Flooring: Polished marble, dark hardwood with inlays, premium wool rugs
+- Create a sense of opulence and sophistication
+        `.trim()
+    },
+    {
+        id: 'budget',
+        name: 'Budget Friendly',
+        icon: 'ðŸ’°',
+        description: 'Practical, functional, cost-effective solutions',
+        priceTier: 'free',
+        colors: {
+            primary: '#4A90E2', // Blue
+            secondary: '#F5F5F5', // White
+            accent: '#50E3C2', // Mint
+            walls: '#FFFFFF', // White
+            floor: '#D2B48C' // Light oak
+        },
+        furniture: {
+            style: 'IKEA-style Functional',
+            pieces: ['Simple sofa', 'Flat-pack shelves', 'Multi-purpose table', 'Basic lighting'],
+            materials: ['Particle board', 'Fabric', 'Plastic', 'Laminate', 'Glass']
+        },
+        lighting: 'Practical, energy-efficient LED with simple fixtures',
+        decor: ['Minimal wall art', 'Potted plants', 'Simple curtains', 'Storage solutions'],
+        promptAdditions: `
+- BUDGET FRIENDLY STYLE:
+- Materials: Laminate flooring, simple fabrics, basic wood finishes
+- Furniture: Practical, functional designs, flat-pack aesthetic
+- Colors: Neutral tones with minimal accent colors
+- Keep designs simple and cost-effective
+- Focus on utility and space efficiency
+- Avoid expensive materials like marble, crystal, or premium woods
+- Create a clean, organized, functional space
+        `.trim()
+    },
+    {
+        id: 'minimalist',
+        name: 'Minimalist Zen',
+        icon: 'ðŸŽ',
+        description: 'Clean lines, neutral tones, clutter-free spaces',
+        priceTier: 'free',
+        colors: {
+            primary: '#E8E8E8',
+            secondary: '#FFFFFF',
+            accent: '#808080',
+            walls: '#FFFFFF',
+            floor: '#D3C5B5'
+        },
+        furniture: {
+            style: 'Minimalist Japanese',
+            pieces: ['Low-profile sofa', 'Simple wooden table', 'Floor cushions', 'Clean shelving'],
+            materials: ['Natural wood', 'Cotton', 'Linen', 'Stone', 'Bamboo']
+        },
+        lighting: 'Soft, diffused natural light with simple paper lanterns',
+        decor: ['Single statement plant', 'Simple ceramics', 'One art piece', 'Nothing excessive'],
+        promptAdditions: `
+- MINIMALIST ZEN STYLE:
+- Clean lines, no clutter, empty space is valued
+- Materials: Natural wood, stone, cotton, linen, bamboo
+- Colors: White, beige, light gray, earth tones only
+- Furniture: Low-profile, functional, simple geometric shapes
+- Lighting: Soft, warm, diffused natural light
+- Decor: Minimal, one or two statement pieces maximum
+- Create a calm, peaceful, uncluttered environment
+- Follow "less is more" philosophy
+        `.trim()
+    },
+    {
+        id: 'eclectic',
+        name: 'Eclectic Boho',
+        icon: 'ðŸª´',
+        description: 'Mixing patterns, colors, and textures creatively',
+        priceTier: 'free',
+        colors: {
+            primary: '#E67E22',
+            secondary: '#9B59B6',
+            accent: '#2ECC71',
+            walls: '#FDF5E6',
+            floor: '#A0522D'
+        },
+        furniture: {
+            style: 'Bohemian Eclectic',
+            pieces: ['Vintage sofa', 'Moroccan poufs', 'Macrame wall hanging', 'Floor cushions'],
+            materials: ['Rattan', 'Macrame', 'Velvet', 'Wool', 'Clay']
+        },
+        lighting: 'Warm ambient with string lights, lanterns, and stained glass',
+        decor: ['Plants everywhere', 'Patterned rugs', 'Tapestries', 'Collected objects', 'Books'],
+        promptAdditions: `
+- ECLECTIC BOHEMIAN STYLE:
+- Mix and match patterns, textures, and colors freely
+- Materials: Rattan, macrame, velvet, wool, clay, natural fibers
+- Colors: Rich jewel tones, warm earth colors, eclectic combinations
+- Furniture: Mix of vintage and global pieces, low seating
+- Lighting: Warm ambient, string lights, lanterns, colorful glass
+- Decor: Abundant plants, patterned rugs, wall hangings, collected items
+- Create a lived-in, artistic, personal space
+- Embrace maximalism and self-expression
+        `.trim()
+    },
+    {
+        id: 'traditional',
+        name: 'Classic Traditional',
+        icon: 'ðŸ›ï¸',
+        description: 'Timeless elegance, wood details, refined comfort',
+        priceTier: 'premium',
+        colors: {
+            primary: '#8B4513',
+            secondary: '#D2691E',
+            accent: '#B8860B',
+            walls: '#F5DEB3',
+            floor: '#654321'
+        },
+        furniture: {
+            style: 'Classic English/American',
+            pieces: ['Chesterfield sofa', 'Wood coffee table', 'Wingback chairs', 'Grandfather clock'],
+            materials: ['Mahogany', 'Leather', 'Damask', 'Velvet', 'Brass']
+        },
+        lighting: 'Warm, classic fixtures with table lamps and chandeliers',
+        decor: ['Oil paintings', 'Oriental rugs', 'Antique vases', 'Books', 'Family photos'],
+        promptAdditions: `
+- CLASSIC TRADITIONAL STYLE:
+- Timeless elegance with detailed woodwork
+- Materials: Mahogany, oak, leather, damask, velvet, brass
+- Colors: Warm wood tones, burgundy, navy, forest green
+- Furniture: Tufted sofas, wingback chairs, substantial wood pieces
+- Lighting: Warm ambient, crystal chandeliers, brass table lamps
+- Decor: Oil paintings, oriental rugs, antique accessories
+- Create refined, comfortable, timeless spaces
+- Symmetrical arrangements and classic proportions
+        `.trim()
+    }
+];
+
+export const getPresetById = (id: PresetCategory): DesignPreset | undefined => {
+    return DESIGN_PRESETS.find(preset => preset.id === id);
+};
+
+export const getFreePresets = (): DesignPreset[] => {
+    return DESIGN_PRESETS.filter(preset => preset.priceTier === 'free');
+};
+
+export const getPremiumPresets = (): DesignPreset[] => {
+    return DESIGN_PRESETS.filter(preset => preset.priceTier === 'premium');
+};
+
+==== FILE: C:\Users\user\Desktop\roomify\lib\puter.action.ts ====
+
+// FILE: C:\Users\user\Desktop\roomify\lib\puter.action.ts
+
+import puter from "@heyputer/puter.js";
+import { getOrCreateHostingConfig, uploadImageToHosting } from "./puter.hosting";
+import { isHostedUrl } from "./utils";
+import { PUTER_WORKER_URL } from "./constants";
+import type { DesignItem, CreateProjectParams, PublicProject, GalleryFilter } from "./types";
+import { 
+    validateRenderLimitOnServer,
+    incrementRenderCountOnServer,
+    incrementExportCountOnServer,
+    incrementPDFExportCountOnServer,
+    getServerUsageStats
+} from './server.validation';
+
+export const signIn = async () => await puter.auth.signIn();
+
+export const signOut = () => puter.auth.signOut();
+
+export const getCurrentUser = async () => {
+    try {
+        return await puter.auth.getUser();
+    } catch {
+        return null;
+    }
+}
+
+export const createProject = async ({ item, visibility = "private" }: CreateProjectParams): Promise<DesignItem | null | undefined> => {
+    if(!PUTER_WORKER_URL) {
+        console.warn('Missing VITE_PUTER_WORKER_URL; skip history fetch;');
+        return null;
+    }
+    const projectId = item.id;
+
+    const hosting = await getOrCreateHostingConfig();
+
+    const hostedSource = projectId ?
+        await uploadImageToHosting({ hosting, url: item.sourceImage, projectId, label: 'source', }) : null;
+
+    const hostedRender = projectId && item.renderedImage ?
+        await uploadImageToHosting({ hosting, url: item.renderedImage, projectId, label: 'rendered', }) : null;
+
+    const resolvedSource = hostedSource?.url || (isHostedUrl(item.sourceImage)
+        ? item.sourceImage
+        : ''
+    );
+
+    if(!resolvedSource) {
+        console.warn('Failed to host source image, skipping save.')
+        return null;
+    }
+
+    const resolvedRender = hostedRender?.url
+        ? hostedRender?.url
+        : item.renderedImage && isHostedUrl(item.renderedImage)
+            ? item.renderedImage
+            : undefined;
+
+    const {
+        sourcePath: _sourcePath,
+        renderedPath: _renderedPath,
+        publicPath: _publicPath,
+        ...rest
+    } = item;
+
+    const payload = {
+        ...rest,
+        sourceImage: resolvedSource,
+        renderedImage: resolvedRender,
+        style: item.style,
+        preset: item.preset,
+        renderedStyles: item.renderedStyles,
+        renderedPresets: item.renderedPresets,
+    }
+
+    try {
+        const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/projects/save`, {
+            method: 'POST',
+            body: JSON.stringify({
+                project: payload,
+                visibility
+            })
+        });
+
+        if(!response.ok) {
+            console.error('failed to save the project', await response.text());
+            return null;
+        }
+
+        const data = (await response.json()) as { project?: DesignItem | null }
+
+        return data?.project ?? null;
+    } catch (e) {
+        console.log('Failed to save project', e)
+        return null;
+    }
+}
+
+export const getProjects = async () => {
+    if(!PUTER_WORKER_URL) {
+        console.warn('Missing VITE_PUTER_WORKER_URL; skip history fetch;');
+        return []
+    }
+
+    try {
+        const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/projects/list`, { method: 'GET' });
+
+        if(!response.ok) {
+            console.error('Failed to fetch history', await response.text());
+            return [];
+        }
+
+        const data = (await response.json()) as { projects?: DesignItem[] | null };
+
+        return Array.isArray(data?.projects) ? data?.projects : [];
+    } catch (e) {
+        console.error('Failed to get projects', e);
+        return [];
+    }
+}
+
+export const getProjectById = async ({ id }: { id: string }) => {
+    if (!PUTER_WORKER_URL) {
+        console.warn("Missing VITE_PUTER_WORKER_URL; skipping project fetch.");
+        return null;
+    }
+
+    console.log("Fetching project with ID:", id);
+
+    try {
+        const response = await puter.workers.exec(
+            `${PUTER_WORKER_URL}/api/projects/get?id=${encodeURIComponent(id)}`,
+            { method: "GET" },
+        );
+
+        console.log("Fetch project response:", response);
+
+        if (!response.ok) {
+            console.error("Failed to fetch project:", await response.text());
+            return null;
+        }
+
+        const data = (await response.json()) as {
+            project?: DesignItem | null;
+        };
+
+        console.log("Fetched project data:", data);
+
+        return data?.project ?? null;
+    } catch (error) {
+        console.error("Failed to fetch project:", error);
+        return null;
+    }
+};
+
+// PROJECT DASHBOARD FUNCTIONS
+
+export const renameProject = async (id: string, newName: string): Promise<boolean> => {
+    if (!PUTER_WORKER_URL) {
+        console.warn('Missing VITE_PUTER_WORKER_URL');
+        return false;
+    }
+
+    try {
+        const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/projects/rename`, {
+            method: 'POST',
+            body: JSON.stringify({ id, name: newName })
+        });
+
+        if (!response.ok) {
+            console.error('Failed to rename project', await response.text());
+            return false;
+        }
+
+        return true;
+    } catch (e) {
+        console.error('Failed to rename project:', e);
+        return false;
+    }
+};
+
+export const deleteProject = async (id: string): Promise<boolean> => {
+    if (!PUTER_WORKER_URL) {
+        console.warn('Missing VITE_PUTER_WORKER_URL');
+        return false;
+    }
+
+    try {
+        const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/projects/delete`, {
+            method: 'POST',
+            body: JSON.stringify({ id })
+        });
+
+        if (!response.ok) {
+            console.error('Failed to delete project', await response.text());
+            return false;
+        }
+
+        return true;
+    } catch (e) {
+        console.error('Failed to delete project:', e);
+        return false;
+    }
+};
+
+export const toggleFavorite = async (id: string, isFavorite: boolean): Promise<boolean> => {
+    if (!PUTER_WORKER_URL) {
+        console.warn('Missing VITE_PUTER_WORKER_URL');
+        return false;
+    }
+
+    try {
+        const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/projects/favorite`, {
+            method: 'POST',
+            body: JSON.stringify({ id, favorite: isFavorite })
+        });
+
+        if (!response.ok) {
+            console.error('Failed to toggle favorite', await response.text());
+            return false;
+        }
+
+        return true;
+    } catch (e) {
+        console.error('Failed to toggle favorite:', e);
+        return false;
+    }
+};
+
+export const getFavorites = async (): Promise<string[]> => {
+    if (!PUTER_WORKER_URL) {
+        console.warn('Missing VITE_PUTER_WORKER_URL');
+        return [];
+    }
+
+    try {
+        const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/projects/favorites`, {
+            method: 'GET'
+        });
+
+        if (!response.ok) {
+            console.error('Failed to get favorites', await response.text());
+            return [];
+        }
+
+        const data = await response.json();
+        return data.favorites || [];
+    } catch (e) {
+        console.error('Failed to get favorites:', e);
+        return [];
+    }
+};
+
+// SHARE SYSTEM FUNCTIONS
+
+export const shareProject = async (id: string, isPublic: boolean): Promise<{ success: boolean; shareUrl?: string; shareToken?: string }> => {
+    if (!PUTER_WORKER_URL) {
+        console.warn('Missing VITE_PUTER_WORKER_URL');
+        return { success: false };
+    }
+
+    try {
+        const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/projects/share`, {
+            method: 'POST',
+            body: JSON.stringify({ id, isPublic })
+        });
+
+        if (!response.ok) {
+            console.error('Failed to share project', await response.text());
+            return { success: false };
+        }
+
+        const data = await response.json();
+        return { 
+            success: true, 
+            shareUrl: data.shareUrl, 
+            shareToken: data.shareToken 
+        };
+    } catch (e) {
+        console.error('Failed to share project:', e);
+        return { success: false };
+    }
+};
+
+export const getPublicGallery = async (filter: GalleryFilter): Promise<{ projects: PublicProject[]; total: number }> => {
+    if (!PUTER_WORKER_URL) {
+        console.warn('Missing VITE_PUTER_WORKER_URL');
+        return { projects: [], total: 0 };
+    }
+
+    try {
+        const params = new URLSearchParams();
+        params.append('limit', '20');
+        params.append('offset', '0');
+        params.append('sortBy', filter.sortBy);
+        if (filter.style) params.append('style', filter.style);
+        if (filter.preset) params.append('preset', filter.preset);
+        if (filter.search) params.append('search', filter.search);
+
+        const response = await puter.workers.exec(
+            `${PUTER_WORKER_URL}/api/projects/gallery?${params.toString()}`,
+            { method: 'GET' }
+        );
+
+        if (!response.ok) {
+            console.error('Failed to get gallery', await response.text());
+            return { projects: [], total: 0 };
+        }
+
+        const data = await response.json();
+        return { 
+            projects: data.projects || [], 
+            total: data.total || 0 
+        };
+    } catch (e) {
+        console.error('Failed to get gallery:', e);
+        return { projects: [], total: 0 };
+    }
+};
+
+export const incrementProjectView = async (id: string): Promise<boolean> => {
+    if (!PUTER_WORKER_URL) return false;
+
+    try {
+        const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/projects/view`, {
+            method: 'POST',
+            body: JSON.stringify({ id })
+        });
+
+        return response.ok;
+    } catch (e) {
+        console.error('Failed to increment view:', e);
+        return false;
+    }
+};
+
+export const likeProject = async (id: string, like: boolean): Promise<{ success: boolean; likeCount?: number }> => {
+    if (!PUTER_WORKER_URL) return { success: false };
+
+    try {
+        const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/projects/like`, {
+            method: 'POST',
+            body: JSON.stringify({ id, like })
+        });
+
+        if (!response.ok) return { success: false };
+
+        const data = await response.json();
+        return { success: true, likeCount: data.likeCount };
+    } catch (e) {
+        console.error('Failed to like project:', e);
+        return { success: false };
+    }
+};
+
+export const getPublicProject = async (id: string, shareToken?: string): Promise<DesignItem | null> => {
+    if (!PUTER_WORKER_URL) return null;
+
+    try {
+        const url = `${PUTER_WORKER_URL}/api/projects/get?id=${encodeURIComponent(id)}${shareToken ? `&token=${shareToken}` : ''}`;
+        const response = await puter.workers.exec(url, { method: 'GET' });
+
+        if (!response.ok) return null;
+
+        const data = await response.json();
+        return data.project || null;
+    } catch (e) {
+        console.error('Failed to get public project:', e);
+        return null;
+    }
+};
+
+// ============================================
+// SERVER-VALIDATED USAGE FUNCTIONS
+// ============================================
+
+export const incrementRenderCount = async (userId: string): Promise<boolean> => {
+    const result = await incrementRenderCountOnServer(userId);
+    return result.allowed;
+};
+
+export const incrementExportCount = async (userId: string): Promise<boolean> => {
+    const result = await incrementExportCountOnServer(userId);
+    return result.allowed;
+};
+
+export const incrementPDFExportCount = async (userId: string): Promise<boolean> => {
+    const result = await incrementPDFExportCountOnServer(userId);
+    return result.allowed;
+};
+
+export const getRemainingUsage = async (userId: string): Promise<{
+    rendersRemaining: number;
+    exportsRemaining: number;
+    pdfExportsRemaining: number;
+    isPremium: boolean;
+}> => {
+    const stats = await getServerUsageStats(userId);
+    
+    if (!stats) {
+        return {
+            rendersRemaining: 3,
+            exportsRemaining: 5,
+            pdfExportsRemaining: 2,
+            isPremium: false
+        };
+    }
+    
+    return {
+        rendersRemaining: stats.rendersRemaining === Infinity ? Infinity : stats.rendersRemaining,
+        exportsRemaining: stats.exportsRemaining === Infinity ? Infinity : stats.exportsRemaining,
+        pdfExportsRemaining: stats.pdfsRemaining === Infinity ? Infinity : stats.pdfsRemaining,
+        isPremium: stats.isPremium
+    };
+};
+
+export const checkRenderLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string; showUpgrade?: boolean }> => {
+    const stats = await getServerUsageStats(userId);
+    
+    if (!stats) {
+        return { allowed: true, remaining: 3 };
+    }
+    
+    if (stats.isPremium) {
+        return { allowed: true, remaining: Infinity, message: 'Pro user - unlimited renders' };
+    }
+    
+    const remaining = stats.rendersRemaining;
+    const showUpgrade = remaining <= 1;
+    
+    if (remaining <= 0) {
+        return {
+            allowed: false,
+            remaining: 0,
+            message: `âš ï¸ You've reached your free limit of 3 renders. Upgrade to Pro for unlimited renders!`,
+            showUpgrade: true
+        };
+    }
+    
+    if (remaining === 1) {
+        return {
+            allowed: true,
+            remaining,
+            message: `âš ï¸ Last free render! After this, upgrade to Pro for unlimited renders.`,
+            showUpgrade: true
+        };
+    }
+    
+    return {
+        allowed: true,
+        remaining,
+        message: `You have ${remaining} free render${remaining !== 1 ? 's' : ''} remaining this month`,
+        showUpgrade: false
+    };
+};
+
+export const checkExportLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string; showUpgrade?: boolean }> => {
+    const stats = await getServerUsageStats(userId);
+    
+    if (!stats) {
+        return { allowed: true, remaining: 5 };
+    }
+    
+    if (stats.isPremium) {
+        return { allowed: true, remaining: Infinity, message: 'Pro user - unlimited exports' };
+    }
+    
+    const remaining = stats.exportsRemaining;
+    const showUpgrade = remaining <= 1;
+    
+    if (remaining <= 0) {
+        return {
+            allowed: false,
+            remaining: 0,
+            message: `âš ï¸ You've reached your free limit of 5 exports. Upgrade to Pro for unlimited exports!`,
+            showUpgrade: true
+        };
+    }
+    
+    if (remaining === 1) {
+        return {
+            allowed: true,
+            remaining,
+            message: `âš ï¸ Last free export! After this, upgrade to Pro for unlimited exports.`,
+            showUpgrade: true
+        };
+    }
+    
+    return {
+        allowed: true,
+        remaining,
+        message: `You have ${remaining} free export${remaining !== 1 ? 's' : ''} remaining this month`,
+        showUpgrade: false
+    };
+};
+
+export const checkPDFExportLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string; showUpgrade?: boolean }> => {
+    const stats = await getServerUsageStats(userId);
+    
+    if (!stats) {
+        return { allowed: true, remaining: 2 };
+    }
+    
+    if (stats.isPremium) {
+        return { allowed: true, remaining: Infinity, message: 'Pro user - unlimited PDF exports' };
+    }
+    
+    const remaining = stats.pdfsRemaining;
+    const showUpgrade = remaining <= 1;
+    
+    if (remaining <= 0) {
+        return {
+            allowed: false,
+            remaining: 0,
+            message: `âš ï¸ You've reached your free limit of 2 PDF exports. Upgrade to Pro for unlimited PDF exports!`,
+            showUpgrade: true
+        };
+    }
+    
+    if (remaining === 1) {
+        return {
+            allowed: true,
+            remaining,
+            message: `âš ï¸ Last free PDF export! After this, upgrade to Pro for unlimited PDF exports.`,
+            showUpgrade: true
+        };
+    }
+    
+    return {
+        allowed: true,
+        remaining,
+        message: `You have ${remaining} free PDF export${remaining !== 1 ? 's' : ''} remaining this month`,
+        showUpgrade: false
+    };
+};
+
+export const checkHighResAccess = async (userId: string): Promise<boolean> => {
+    const stats = await getServerUsageStats(userId);
+    return stats?.isPremium || false;
+};
+
+export const checkPremiumStyle = (styleId: string): { isFree: boolean; showUpgrade: boolean; message?: string } => {
+    const PREMIUM_STYLES = ['industrial', 'scandinavian'];
+    const isPremium = PREMIUM_STYLES.includes(styleId);
+    
+    if (isPremium) {
+        return {
+            isFree: false,
+            showUpgrade: true,
+            message: `âœ¨ ${styleId.charAt(0).toUpperCase() + styleId.slice(1)} style is a Pro feature. Upgrade to unlock all premium styles!`
+        };
+    }
+    
+    return {
+        isFree: true,
+        showUpgrade: false
+    };
+};
+
+export const checkPremiumPreset = (presetId: string): { isFree: boolean; showUpgrade: boolean; message?: string } => {
+    const PREMIUM_PRESETS = ['luxury', 'traditional'];
+    const isPremium = PREMIUM_PRESETS.includes(presetId);
+    
+    if (isPremium) {
+        return {
+            isFree: false,
+            showUpgrade: true,
+            message: `ðŸ’Ž ${presetId.charAt(0).toUpperCase() + presetId.slice(1)} preset is a Pro feature. Upgrade to unlock all premium presets!`
+        };
+    }
+    
+    return {
+        isFree: true,
+        showUpgrade: false
+    };
+};
+
+==== FILE: C:\Users\user\Desktop\roomify\lib\puter.config.ts ====
+
+// FILE: C:\Users\user\Desktop\roomify\lib\puter.config.ts
+
+import puter from "@heyputer/puter.js";
+
+export const checkPuterConfig = async () => {
+    try {
+        // Check if puter is initialized
+        if (!puter) {
+            console.error('Puter not initialized');
+            return false;
+        }
+        
+        // Check if AI is available
+        if (!puter.ai || typeof puter.ai.txt2img !== 'function') {
+            console.error('Puter AI not available');
+            return false;
+        }
+        
+        // Check authentication
+        const user = await puter.auth.getUser();
+        if (!user) {
+            console.error('User not authenticated');
+            return false;
+        }
+        
+        console.log('Puter configuration check passed');
+        console.log('User:', user.username);
+        console.log('AI available:', !!puter.ai.txt2img);
+        
+        return true;
+    } catch (error) {
+        console.error('Puter configuration check failed:', error);
+        return false;
+    }
+};
+
+==== FILE: C:\Users\user\Desktop\roomify\lib\puter.hosting.ts ====
+
+import puter from "@heyputer/puter.js";
+import {
+    createHostingSlug,
+    fetchBlobFromUrl, getHostedUrl,
+    getImageExtension,
+    HOSTING_CONFIG_KEY,
+    imageUrlToPngBlob,
+    isHostedUrl
+} from "./utils";
+
+export const getOrCreateHostingConfig = async (): Promise<HostingConfig | null> => {
+    const existing = (await puter.kv.get(HOSTING_CONFIG_KEY)) as HostingConfig | null;
+
+    if(existing?.subdomain) return { subdomain: existing.subdomain };
+
+    const subdomain = createHostingSlug();
+
+    try {
+        const created = await puter.hosting.create(subdomain, '.');
+
+        const record = { subdomain: created.subdomain };
+
+        await puter.kv.set(HOSTING_CONFIG_KEY, record);
+
+        return record;
+    } catch (e) {
+        console.warn(`Could not find subdomain: ${e}`);
+        return null;
+    }
+}
+
+export const uploadImageToHosting = async ({ hosting, url, projectId, label }: StoreHostedImageParams): Promise<HostedAsset | null> => {
+    if(!hosting || !url) return null;
+    if(isHostedUrl(url)) return { url };
+
+    try {
+        const resolved = label === "rendered"
+            ? await imageUrlToPngBlob(url)
+                .then((blob) => blob ? { blob, contentType: 'image/png' }: null)
+            : await fetchBlobFromUrl(url);
+
+        if(!resolved) return null;
+
+        const contentType = resolved.contentType || resolved.blob.type || '';
+        const ext = getImageExtension(contentType, url);
+        const dir = `projects/${projectId}`;
+        const filePath = `${dir}/${label}.${ext}`;
+
+        const uploadFile = new File([resolved.blob], `${label}.${ext}`, {
+            type: contentType,
+        });
+
+        await puter.fs.mkdir(dir, { createMissingParents: true });
+        await puter.fs.write(filePath, uploadFile);
+
+        const hostedUrl = getHostedUrl({ subdomain: hosting.subdomain }, filePath);
+
+        return hostedUrl ? { url: hostedUrl } : null;
+    } catch (e) {
+        console.warn(`Failed to store hosted image: ${e}`);
+        return null;
+    }
+}
+
+==== FILE: C:\Users\user\Desktop\roomify\lib\puter.worker.js ====
+
+// FILE: C:\Users\user\Desktop\roomify\lib\puter.worker.js
+
+const PROJECT_PREFIX = 'roomify_project_';
+const FAVORITES_PREFIX = 'roomify_favorites_';
+
+const jsonError = (status, message, extra = {}) => {
+    return new Response(JSON.stringify({ error: message, ...extra }), {
+        status,
+        headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, puter-auth',
+        }
+    })
+}
+
+const jsonSuccess = (data, extra = {}) => {
+    return new Response(JSON.stringify({ success: true, ...data, ...extra }), {
+        status: 200,
+        headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, puter-auth',
+        }
+    })
+}
+
+const getUserId = async (userPuter) => {
+    try {
+        const user = await userPuter.auth.getUser();
+        return user?.uuid || null;
+    } catch {
+        return null;
+    }
+}
+
+// Helper to check if image data is too large (KV has ~1MB limit)
+const isImageTooLarge = (imageData) => {
+    if (!imageData) return false;
+    const approximateSizeBytes = imageData.length * 0.75;
+    return approximateSizeBytes > 800000;
+}
+
+// Generate share token
+function generateShareToken() {
+    return Math.random().toString(36).substring(2, 15) + 
+           Math.random().toString(36).substring(2, 15);
+}
+
+function getBaseUrl() {
+    return process.env.BASE_URL || 'https://roomify.app';
+}
+
+// USAGE LIMITS (Server-side enforcement)
+const USAGE_LIMITS = {
+    FREE_RENDERS: 3,
+    FREE_EXPORTS: 5,
+    FREE_PDF_EXPORTS: 2,
+    PREMIUM_STYLES: ['industrial', 'scandinavian'],
+    PREMIUM_PRESETS: ['luxury', 'traditional']
+};
+
+// Helper to get user usage stats
+const getUserUsageStats = async (userPuter, userId) => {
+    const key = `roomify_usage_${userId}`;
+    let stats = await userPuter.kv.get(key);
+    
+    if (!stats) {
+        stats = {
+            renderCount: 0,
+            exportCount: 0,
+            pdfExportCount: 0,
+            lastResetDate: new Date().toISOString(),
+            isPremium: false
+        };
+        await userPuter.kv.set(key, stats);
+    }
+    
+    // Check for monthly reset
+    const lastReset = new Date(stats.lastResetDate);
+    const now = new Date();
+    const monthsDiff = (now.getFullYear() - lastReset.getFullYear()) * 12 + (now.getMonth() - lastReset.getMonth());
+    
+    if (monthsDiff >= 1 && !stats.isPremium) {
+        stats.renderCount = 0;
+        stats.exportCount = 0;
+        stats.pdfExportCount = 0;
+        stats.lastResetDate = now.toISOString();
+        await userPuter.kv.set(key, stats);
+    }
+    
+    return stats;
+};
+
+// Server-side validation functions
+const validateRenderLimit = async (userPuter, userId, stats) => {
+    if (stats.isPremium) return { allowed: true };
+    
+    if (stats.renderCount >= USAGE_LIMITS.FREE_RENDERS) {
+        return { 
+            allowed: false, 
+            error: `RENDER_LIMIT_EXCEEDED: You've used all ${USAGE_LIMITS.FREE_RENDERS} free renders. Upgrade to Pro.`
+        };
+    }
+    
+    return { allowed: true };
+};
+
+const validateExportLimit = async (userPuter, userId, stats) => {
+    if (stats.isPremium) return { allowed: true };
+    
+    if (stats.exportCount >= USAGE_LIMITS.FREE_EXPORTS) {
+        return { 
+            allowed: false, 
+            error: `EXPORT_LIMIT_EXCEEDED: You've used all ${USAGE_LIMITS.FREE_EXPORTS} free exports. Upgrade to Pro.`
+        };
+    }
+    
+    return { allowed: true };
+};
+
+const validatePDFExportLimit = async (userPuter, userId, stats) => {
+    if (stats.isPremium) return { allowed: true };
+    
+    if (stats.pdfExportCount >= USAGE_LIMITS.FREE_PDF_EXPORTS) {
+        return { 
+            allowed: false, 
+            error: `PDF_LIMIT_EXCEEDED: You've used all ${USAGE_LIMITS.FREE_PDF_EXPORTS} free PDF exports. Upgrade to Pro.`
+        };
+    }
+    
+    return { allowed: true };
+};
+
+// Save Project with validation
+router.post('/api/projects/save', async ({ request, user }) => {
+    try {
+        const userPuter = user.puter;
+        if (!userPuter) return jsonError(401, 'Authentication failed');
+
+        const body = await request.json();
+        const project = body?.project;
+        const visibility = body?.visibility || 'private';
+
+        if (!project?.id || !project?.sourceImage) {
+            return jsonError(400, 'Project ID and source image are required');
+        }
+
+        const userId = await getUserId(userPuter);
+        if (!userId) return jsonError(401, 'Authentication failed');
+
+        // Get user usage stats for validation
+        const stats = await getUserUsageStats(userPuter, userId);
+        
+        // Validate render limit if this is a new render
+        if (project.renderedImage && !project.renderedImage.includes('watermark')) {
+            const renderValidation = await validateRenderLimit(userPuter, userId, stats);
+            if (!renderValidation.allowed) {
+                return jsonError(403, renderValidation.error);
+            }
+        }
+
+        const renderedImageTooLarge = isImageTooLarge(project.renderedImage);
+        const renderedStylesTooLarge = project.renderedStyles && Object.values(project.renderedStyles).some(img => isImageTooLarge(img));
+
+        const payload = {
+            id: project.id,
+            name: project.name || `Residence ${project.id}`,
+            sourceImage: project.sourceImage,
+            timestamp: project.timestamp || Date.now(),
+            ownerId: project.ownerId || userId,
+            isPublic: visibility === 'public',
+            style: project.style || 'modern',
+            preset: project.preset || 'budget',
+            updatedAt: new Date().toISOString(),
+        };
+
+        if (project.renderedImage && !renderedImageTooLarge) {
+            payload.renderedImage = project.renderedImage;
+        }
+
+        if (project.renderedStyles && !renderedStylesTooLarge) {
+            const styleKeys = Object.keys(project.renderedStyles);
+            if (styleKeys.length <= 5) {
+                payload.renderedStyles = project.renderedStyles;
+            } else {
+                const recentStyles = {};
+                const lastFiveKeys = styleKeys.slice(-5);
+                lastFiveKeys.forEach(key => {
+                    recentStyles[key] = project.renderedStyles[key];
+                });
+                payload.renderedStyles = recentStyles;
+            }
+        }
+
+        if (project.renderedPresets) {
+            const presetKeys = Object.keys(project.renderedPresets);
+            if (presetKeys.length <= 10) {
+                payload.renderedPresets = project.renderedPresets;
+            } else {
+                const recentPresets = {};
+                const lastTenKeys = presetKeys.slice(-10);
+                lastTenKeys.forEach(key => {
+                    recentPresets[key] = project.renderedPresets[key];
+                });
+                payload.renderedPresets = recentPresets;
+            }
+        }
+
+        if (project.name) payload.name = project.name;
+        if (project.sharedBy) payload.sharedBy = project.sharedBy;
+        if (project.sharedAt) payload.sharedAt = project.sharedAt;
+
+        const key = `${PROJECT_PREFIX}${project.id}`;
+        await userPuter.kv.set(key, payload);
+
+        const recentKey = `${PROJECT_PREFIX}recent_${userId}`;
+        const recentProjects = (await userPuter.kv.get(recentKey)) || [];
+        
+        if (!recentProjects.includes(project.id)) {
+            recentProjects.unshift(project.id);
+            const trimmedRecent = recentProjects.slice(0, 20);
+            await userPuter.kv.set(recentKey, trimmedRecent);
+        }
+
+        return jsonSuccess({ 
+            saved: true, 
+            id: project.id, 
+            project: payload,
+            warnings: {
+                renderedImageTruncated: renderedImageTooLarge,
+                renderedStylesTruncated: renderedStylesTooLarge
+            }
+        });
+    } catch (e) {
+        console.error('Save error:', e);
+        let errorMessage = 'Failed to save project';
+        if (e.message && e.message.includes('quota')) {
+            errorMessage = 'Storage quota exceeded. Please free up space.';
+        } else if (e.message && e.message.includes('size')) {
+            errorMessage = 'Project data too large. Please reduce image size.';
+        }
+        return jsonError(500, errorMessage, { message: e.message || 'Unknown error' });
+    }
+});
+
+// List Projects
+router.get('/api/projects/list', async ({ user }) => {
+    try {
+        const userPuter = user.puter;
+        if (!userPuter) return jsonError(401, 'Authentication failed');
+
+        const userId = await getUserId(userPuter);
+        if (!userId) return jsonError(401, 'Authentication failed');
+
+        const allProjects = await userPuter.kv.list(PROJECT_PREFIX, true);
+        
+        const projects = allProjects
+            .map(({ value }) => value)
+            .filter(project => project.ownerId === userId)
+            .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+        return jsonSuccess({ projects });
+    } catch (e) {
+        console.error('List projects error:', e);
+        return jsonError(500, 'Failed to list projects', { message: e.message || 'Unknown error' });
+    }
+});
+
+// Get Single Project (with premium validation)
+router.get('/api/projects/get', async ({ request, user }) => {
+    try {
+        const userPuter = user.puter;
+        const url = new URL(request.url);
+        const id = url.searchParams.get('id');
+        const token = url.searchParams.get('token');
+
+        if (!id) return jsonError(400, 'Project ID is required');
+
+        const key = `${PROJECT_PREFIX}${id}`;
+        const project = await userPuter.kv.get(key);
+
+        if (!project) return jsonError(404, 'Project not found');
+
+        const isPublicAccess = token && project.shareToken === token;
+        const userId = await getUserId(userPuter);
+        const isOwner = userId && project.ownerId === userId;
+
+        if (!isOwner && !project.isPublic && !isPublicAccess) {
+            return jsonError(403, 'Access denied');
+        }
+
+        // Check if user has access to premium features in this project
+        if (!isOwner && project.style && USAGE_LIMITS.PREMIUM_STYLES.includes(project.style)) {
+            project.isPremiumFeature = true;
+        }
+
+        return jsonSuccess({ project });
+    } catch (e) {
+        console.error('Get project error:', e);
+        return jsonError(500, 'Failed to get project', { message: e.message || 'Unknown error' });
+    }
+});
+
+// Rename Project
+router.post('/api/projects/rename', async ({ request, user }) => {
+    try {
+        const userPuter = user.puter;
+        if (!userPuter) return jsonError(401, 'Authentication failed');
+
+        const body = await request.json();
+        const { id, name } = body;
+
+        if (!id) return jsonError(400, 'Project ID is required');
+        if (!name || !name.trim()) return jsonError(400, 'Project name is required');
+
+        const userId = await getUserId(userPuter);
+        if (!userId) return jsonError(401, 'Authentication failed');
+
+        const key = `${PROJECT_PREFIX}${id}`;
+        const project = await userPuter.kv.get(key);
+
+        if (!project) return jsonError(404, 'Project not found');
+        if (project.ownerId !== userId) return jsonError(403, 'Access denied');
+
+        project.name = name.trim();
+        project.updatedAt = new Date().toISOString();
+
+        await userPuter.kv.set(key, project);
+
+        return jsonSuccess({ renamed: true, project });
+    } catch (e) {
+        console.error('Rename error:', e);
+        return jsonError(500, 'Failed to rename project', { message: e.message || 'Unknown error' });
+    }
+});
+
+// Delete Project
+router.post('/api/projects/delete', async ({ request, user }) => {
+    try {
+        const userPuter = user.puter;
+        if (!userPuter) return jsonError(401, 'Authentication failed');
+
+        const body = await request.json();
+        const id = body.id;
+
+        if (!id) return jsonError(400, 'Project ID is required');
+
+        const userId = await getUserId(userPuter);
+        if (!userId) return jsonError(401, 'Authentication failed');
+
+        const key = `${PROJECT_PREFIX}${id}`;
+        const project = await userPuter.kv.get(key);
+
+        if (!project) return jsonError(404, 'Project not found');
+        if (project.ownerId !== userId) return jsonError(403, 'Access denied');
+
+        await userPuter.kv.del(key);
+
+        // Remove from recent projects
+        const recentKey = `${PROJECT_PREFIX}recent_${userId}`;
+        const recentProjects = (await userPuter.kv.get(recentKey)) || [];
+        const updatedRecent = recentProjects.filter(pid => pid !== id);
+        await userPuter.kv.set(recentKey, updatedRecent);
+
+        // Remove from favorites
+        const favKey = `${FAVORITES_PREFIX}${userId}`;
+        const favorites = (await userPuter.kv.get(favKey)) || [];
+        const updatedFavorites = favorites.filter(favId => favId !== id);
+        await userPuter.kv.set(favKey, updatedFavorites);
+
+        // Remove from public index
+        const publicIndexKey = 'roomify_public_projects';
+        let publicProjects = (await userPuter.kv.get(publicIndexKey)) || [];
+        publicProjects = publicProjects.filter(pid => pid !== id);
+        await userPuter.kv.set(publicIndexKey, publicProjects);
+
+        return jsonSuccess({ deleted: true });
+    } catch (e) {
+        console.error('Delete error:', e);
+        return jsonError(500, 'Failed to delete project', { message: e.message || 'Unknown error' });
+    }
+});
+
+// Toggle Favorite
+router.post('/api/projects/favorite', async ({ request, user }) => {
+    try {
+        const userPuter = user.puter;
+        if (!userPuter) return jsonError(401, 'Authentication failed');
+
+        const body = await request.json();
+        const { id, favorite } = body;
+
+        if (!id) return jsonError(400, 'Project ID is required');
+
+        const userId = await getUserId(userPuter);
+        if (!userId) return jsonError(401, 'Authentication failed');
+
+        const key = `${PROJECT_PREFIX}${id}`;
+        const project = await userPuter.kv.get(key);
+        if (!project) return jsonError(404, 'Project not found');
+
+        const favKey = `${FAVORITES_PREFIX}${userId}`;
+        let favorites = (await userPuter.kv.get(favKey)) || [];
+
+        if (favorite) {
+            if (!favorites.includes(id)) {
+                favorites.push(id);
+            }
+        } else {
+            favorites = favorites.filter(favId => favId !== id);
+        }
+
+        await userPuter.kv.set(favKey, favorites);
+
+        return jsonSuccess({ favorited: favorite, favorites });
+    } catch (e) {
+        console.error('Favorite error:', e);
+        return jsonError(500, 'Failed to update favorite', { message: e.message || 'Unknown error' });
+    }
+});
+
+// Get Favorites
+router.get('/api/projects/favorites', async ({ user }) => {
+    try {
+        const userPuter = user.puter;
+        if (!userPuter) return jsonError(401, 'Authentication failed');
+
+        const userId = await getUserId(userPuter);
+        if (!userId) return jsonError(401, 'Authentication failed');
+
+        const favKey = `${FAVORITES_PREFIX}${userId}`;
+        const favorites = (await userPuter.kv.get(favKey)) || [];
+
+        return jsonSuccess({ favorites });
+    } catch (e) {
+        console.error('Get favorites error:', e);
+        return jsonError(500, 'Failed to get favorites', { message: e.message || 'Unknown error' });
+    }
+});
+
+// Share Project (Make Public)
+router.post('/api/projects/share', async ({ request, user }) => {
+    try {
+        const userPuter = user.puter;
+        if (!userPuter) return jsonError(401, 'Authentication failed');
+
+        const userId = await getUserId(userPuter);
+        if (!userId) return jsonError(401, 'Authentication failed');
+
+        const body = await request.json();
+        const { id, isPublic } = body;
+
+        if (!id) return jsonError(400, 'Project ID is required');
+
+        const key = `${PROJECT_PREFIX}${id}`;
+        const project = await userPuter.kv.get(key);
+
+        if (!project) return jsonError(404, 'Project not found');
+        if (project.ownerId !== userId) return jsonError(403, 'Access denied');
+
+        let shareToken = project.shareToken;
+        if (isPublic && !shareToken) {
+            shareToken = generateShareToken();
+        }
+
+        const updatedProject = {
+            ...project,
+            isPublic: isPublic || false,
+            shareToken: isPublic ? shareToken : null,
+            sharedAt: isPublic ? new Date().toISOString() : null,
+            sharedBy: isPublic ? userId : null
+        };
+
+        await userPuter.kv.set(key, updatedProject);
+
+        if (isPublic) {
+            const publicIndexKey = 'roomify_public_projects';
+            let publicProjects = (await userPuter.kv.get(publicIndexKey)) || [];
+            if (!publicProjects.includes(id)) {
+                publicProjects.unshift(id);
+                if (publicProjects.length > 1000) publicProjects = publicProjects.slice(0, 1000);
+                await userPuter.kv.set(publicIndexKey, publicProjects);
+            }
+        } else {
+            const publicIndexKey = 'roomify_public_projects';
+            let publicProjects = (await userPuter.kv.get(publicIndexKey)) || [];
+            publicProjects = publicProjects.filter(pid => pid !== id);
+            await userPuter.kv.set(publicIndexKey, publicProjects);
+        }
+
+        const shareUrl = isPublic ? `${getBaseUrl()}/visualizer/${id}?share=${shareToken}` : null;
+
+        return jsonSuccess({ 
+            shared: true, 
+            id, 
+            isPublic: isPublic || false,
+            shareUrl,
+            shareToken
+        });
+    } catch (e) {
+        console.error('Share project error:', e);
+        return jsonError(500, 'Failed to share project', { message: e.message || 'Unknown error' });
+    }
+});
+
+// Get Public Gallery
+router.get('/api/projects/gallery', async ({ request, user }) => {
+    try {
+        const userPuter = user.puter;
+        const url = new URL(request.url);
+        const limit = parseInt(url.searchParams.get('limit') || '20');
+        const offset = parseInt(url.searchParams.get('offset') || '0');
+        const sortBy = url.searchParams.get('sortBy') || 'recent';
+        const style = url.searchParams.get('style');
+        const preset = url.searchParams.get('preset');
+        const search = url.searchParams.get('search');
+
+        const publicIndexKey = 'roomify_public_projects';
+        let publicProjectIds = (await userPuter.kv.get(publicIndexKey)) || [];
+
+        let projects = [];
+        for (const id of publicProjectIds) {
+            const key = `${PROJECT_PREFIX}${id}`;
+            const project = await userPuter.kv.get(key);
+            if (project && project.isPublic) {
+                projects.push(project);
+            }
+        }
+
+        if (style) {
+            projects = projects.filter(p => p.style === style);
+        }
+        if (preset) {
+            projects = projects.filter(p => p.preset === preset);
+        }
+        if (search) {
+            const searchLower = search.toLowerCase();
+            projects = projects.filter(p => 
+                p.name?.toLowerCase().includes(searchLower) ||
+                p.id.toLowerCase().includes(searchLower)
+            );
+        }
+
+        if (sortBy === 'recent') {
+            projects.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        } else if (sortBy === 'popular') {
+            projects.sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0));
+        } else if (sortBy === 'mostLiked') {
+            projects.sort((a, b) => (b.likeCount || 0) - (a.likeCount || 0));
+        }
+
+        const total = projects.length;
+        const paginated = projects.slice(offset, offset + limit);
+
+        return jsonSuccess({ 
+            projects: paginated,
+            total,
+            limit,
+            offset
+        });
+    } catch (e) {
+        console.error('Get gallery error:', e);
+        return jsonError(500, 'Failed to get gallery', { message: e.message || 'Unknown error' });
+    }
+});
+
+// Increment Project View Count
+router.post('/api/projects/view', async ({ request, user }) => {
+    try {
+        const userPuter = user.puter;
+        const body = await request.json();
+        const { id } = body;
+
+        if (!id) return jsonError(400, 'Project ID is required');
+
+        const key = `${PROJECT_PREFIX}${id}`;
+        const project = await userPuter.kv.get(key);
+
+        if (!project) return jsonError(404, 'Project not found');
+
+        project.viewCount = (project.viewCount || 0) + 1;
+        await userPuter.kv.set(key, project);
+
+        return jsonSuccess({ viewed: true, viewCount: project.viewCount });
+    } catch (e) {
+        console.error('View increment error:', e);
+        return jsonError(500, 'Failed to increment view', { message: e.message || 'Unknown error' });
+    }
+});
+
+// Like/Unlike Project
+router.post('/api/projects/like', async ({ request, user }) => {
+    try {
+        const userPuter = user.puter;
+        const userId = await getUserId(userPuter);
+        
+        const body = await request.json();
+        const { id, like } = body;
+
+        if (!id) return jsonError(400, 'Project ID is required');
+
+        const key = `${PROJECT_PREFIX}${id}`;
+        const project = await userPuter.kv.get(key);
+
+        if (!project) return jsonError(404, 'Project not found');
+
+        const likesKey = `roomify_likes_${id}`;
+        let likes = (await userPuter.kv.get(likesKey)) || [];
+
+        if (like && !likes.includes(userId)) {
+            likes.push(userId);
+            project.likeCount = (project.likeCount || 0) + 1;
+        } else if (!like && likes.includes(userId)) {
+            likes = likes.filter(uid => uid !== userId);
+            project.likeCount = Math.max(0, (project.likeCount || 0) - 1);
+        }
+
+        await userPuter.kv.set(likesKey, likes);
+        await userPuter.kv.set(key, project);
+
+        return jsonSuccess({ liked: like, likeCount: project.likeCount });
+    } catch (e) {
+        console.error('Like error:', e);
+        return jsonError(500, 'Failed to update like', { message: e.message || 'Unknown error' });
+    }
+});
+
+// Validate Render Limit Endpoint (for frontend to check before generation)
+router.post('/api/validate/render', async ({ request, user }) => {
+    try {
+        const userPuter = user.puter;
+        if (!userPuter) return jsonError(401, 'Authentication failed');
+
+        const userId = await getUserId(userPuter);
+        if (!userId) return jsonError(401, 'Authentication failed');
+
+        const stats = await getUserUsageStats(userPuter, userId);
+        const validation = await validateRenderLimit(userPuter, userId, stats);
+
+        if (!validation.allowed) {
+            return jsonError(403, validation.error);
+        }
+
+        return jsonSuccess({ 
+            allowed: true, 
+            remaining: USAGE_LIMITS.FREE_RENDERS - stats.renderCount,
+            isPremium: stats.isPremium
+        });
+    } catch (e) {
+        return jsonError(500, 'Validation failed', { message: e.message || 'Unknown error' });
+    }
+});
+
+// Increment Render Count Endpoint (with validation)
+router.post('/api/usage/increment/render', async ({ request, user }) => {
+    try {
+        const userPuter = user.puter;
+        if (!userPuter) return jsonError(401, 'Authentication failed');
+
+        const userId = await getUserId(userPuter);
+        if (!userId) return jsonError(401, 'Authentication failed');
+
+        const stats = await getUserUsageStats(userPuter, userId);
+        const validation = await validateRenderLimit(userPuter, userId, stats);
+
+        if (!validation.allowed) {
+            return jsonError(403, validation.error);
+        }
+
+        if (!stats.isPremium) {
+            stats.renderCount++;
+            const key = `roomify_usage_${userId}`;
+            await userPuter.kv.set(key, stats);
+        }
+
+        return jsonSuccess({ 
+            success: true, 
+            count: stats.renderCount,
+            remaining: USAGE_LIMITS.FREE_RENDERS - stats.renderCount,
+            isPremium: stats.isPremium
+        });
+    } catch (e) {
+        return jsonError(500, 'Failed to increment render count', { message: e.message || 'Unknown error' });
+    }
+});
+
+// Increment Export Count Endpoint (with validation)
+router.post('/api/usage/increment/export', async ({ request, user }) => {
+    try {
+        const userPuter = user.puter;
+        if (!userPuter) return jsonError(401, 'Authentication failed');
+
+        const userId = await getUserId(userPuter);
+        if (!userId) return jsonError(401, 'Authentication failed');
+
+        const stats = await getUserUsageStats(userPuter, userId);
+        const validation = await validateExportLimit(userPuter, userId, stats);
+
+        if (!validation.allowed) {
+            return jsonError(403, validation.error);
+        }
+
+        if (!stats.isPremium) {
+            stats.exportCount++;
+            const key = `roomify_usage_${userId}`;
+            await userPuter.kv.set(key, stats);
+        }
+
+        return jsonSuccess({ 
+            success: true, 
+            count: stats.exportCount,
+            remaining: USAGE_LIMITS.FREE_EXPORTS - stats.exportCount,
+            isPremium: stats.isPremium
+        });
+    } catch (e) {
+        return jsonError(500, 'Failed to increment export count', { message: e.message || 'Unknown error' });
+    }
+});
+
+// Increment PDF Export Count Endpoint (with validation)
+router.post('/api/usage/increment/pdf', async ({ request, user }) => {
+    try {
+        const userPuter = user.puter;
+        if (!userPuter) return jsonError(401, 'Authentication failed');
+
+        const userId = await getUserId(userPuter);
+        if (!userId) return jsonError(401, 'Authentication failed');
+
+        const stats = await getUserUsageStats(userPuter, userId);
+        const validation = await validatePDFExportLimit(userPuter, userId, stats);
+
+        if (!validation.allowed) {
+            return jsonError(403, validation.error);
+        }
+
+        if (!stats.isPremium) {
+            stats.pdfExportCount++;
+            const key = `roomify_usage_${userId}`;
+            await userPuter.kv.set(key, stats);
+        }
+
+        return jsonSuccess({ 
+            success: true, 
+            count: stats.pdfExportCount,
+            remaining: USAGE_LIMITS.FREE_PDF_EXPORTS - stats.pdfExportCount,
+            isPremium: stats.isPremium
+        });
+    } catch (e) {
+        return jsonError(500, 'Failed to increment PDF export count', { message: e.message || 'Unknown error' });
+    }
+});
+
+// Get Usage Stats Endpoint
+router.get('/api/usage/stats', async ({ request, user }) => {
+    try {
+        const userPuter = user.puter;
+        if (!userPuter) return jsonError(401, 'Authentication failed');
+
+        const userId = await getUserId(userPuter);
+        if (!userId) return jsonError(401, 'Authentication failed');
+
+        const stats = await getUserUsageStats(userPuter, userId);
+
+        return jsonSuccess({
+            rendersUsed: stats.renderCount,
+            rendersRemaining: stats.isPremium ? Infinity : Math.max(0, USAGE_LIMITS.FREE_RENDERS - stats.renderCount),
+            exportsUsed: stats.exportCount,
+            exportsRemaining: stats.isPremium ? Infinity : Math.max(0, USAGE_LIMITS.FREE_EXPORTS - stats.exportCount),
+            pdfsUsed: stats.pdfExportCount,
+            pdfsRemaining: stats.isPremium ? Infinity : Math.max(0, USAGE_LIMITS.FREE_PDF_EXPORTS - stats.pdfExportCount),
+            isPremium: stats.isPremium,
+            subscriptionType: stats.subscriptionType,
+            subscriptionEndDate: stats.subscriptionEndDate
+        });
+    } catch (e) {
+        return jsonError(500, 'Failed to get usage stats', { message: e.message || 'Unknown error' });
+    }
+});
+
+// ============================================
+// STRIPE PAYMENT ENDPOINTS
+// ============================================
+
+// Create checkout session
+router.post('/api/create-checkout-session', async ({ request, user }) => {
+    try {
+        const userPuter = user.puter;
+        if (!userPuter) return jsonError(401, 'Authentication failed');
+
+        const body = await request.json();
+        const { priceId, userId, email, successUrl, cancelUrl } = body;
+
+        if (!priceId || !userId || !email) {
+            return jsonError(400, 'Missing required parameters');
+        }
+
+        // In production, you would call Stripe API here
+        // For now, simulate checkout session
+        const sessionId = `cs_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+        
+        // Store pending subscription in KV
+        const pendingKey = `pending_subscription_${sessionId}`;
+        await userPuter.kv.set(pendingKey, {
+            userId,
+            priceId,
+            email,
+            createdAt: new Date().toISOString(),
+            status: 'pending'
+        });
+
+        return jsonSuccess({ 
+            sessionId,
+            checkoutUrl: `${successUrl}?session_id=${sessionId}`
+        });
+    } catch (e) {
+        console.error('Create checkout error:', e);
+        return jsonError(500, 'Failed to create checkout session');
+    }
+});
+
+// Verify payment
+router.get('/api/verify-payment', async ({ request, user }) => {
+    try {
+        const url = new URL(request.url);
+        const sessionId = url.searchParams.get('session_id');
+
+        if (!sessionId) {
+            return jsonError(400, 'Session ID required');
+        }
+
+        // Get pending subscription
+        const pendingKey = `pending_subscription_${sessionId}`;
+        const pending = await userPuter.kv.get(pendingKey);
+
+        if (!pending) {
+            return jsonError(404, 'Session not found');
+        }
+
+        // In production, you would verify with Stripe API
+        // For now, simulate successful verification
+        const isVerified = true;
+
+        if (isVerified) {
+            // Upgrade user to premium
+            const statsKey = `roomify_usage_${pending.userId}`;
+            let stats = await userPuter.kv.get(statsKey);
+            
+            if (stats) {
+                stats.isPremium = true;
+                stats.subscriptionType = pending.priceId?.includes('yearly') ? 'yearly' : 'monthly';
+                stats.subscriptionEndDate = new Date();
+                if (stats.subscriptionType === 'yearly') {
+                    stats.subscriptionEndDate.setDate(stats.subscriptionEndDate.getDate() + 365);
+                } else {
+                    stats.subscriptionEndDate.setDate(stats.subscriptionEndDate.getDate() + 30);
+                }
+                stats.subscriptionEndDate = stats.subscriptionEndDate.toISOString();
+                await userPuter.kv.set(statsKey, stats);
+            }
+
+            // Delete pending record
+            await userPuter.kv.del(pendingKey);
+
+            return jsonSuccess({ verified: true });
+        }
+
+        return jsonSuccess({ verified: false });
+    } catch (e) {
+        console.error('Verify payment error:', e);
+        return jsonError(500, 'Failed to verify payment');
+    }
+});
+
+// Stripe webhook endpoint
+router.post('/api/stripe/webhook', async ({ request, user }) => {
+    try {
+        const body = await request.text();
+        const signature = request.headers.get('stripe-signature');
+
+        // In production, verify webhook signature
+        // const event = stripe.webhooks.constructEvent(body, signature, STRIPE_WEBHOOK_SECRET);
+
+        // Parse webhook event (simulated)
+        const event = JSON.parse(body);
+        
+        if (event.type === 'checkout.session.completed') {
+            const session = event.data.object;
+            const userId = session.client_reference_id;
+            const priceId = session.line_items?.data[0]?.price?.id;
+            
+            // Upgrade user
+            const statsKey = `roomify_usage_${userId}`;
+            let stats = await userPuter.kv.get(statsKey);
+            
+            if (stats) {
+                stats.isPremium = true;
+                stats.subscriptionType = priceId?.includes('yearly') ? 'yearly' : 'monthly';
+                stats.subscriptionEndDate = new Date();
+                if (stats.subscriptionType === 'yearly') {
+                    stats.subscriptionEndDate.setDate(stats.subscriptionEndDate.getDate() + 365);
+                } else {
+                    stats.subscriptionEndDate.setDate(stats.subscriptionEndDate.getDate() + 30);
+                }
+                stats.subscriptionEndDate = stats.subscriptionEndDate.toISOString();
+                await userPuter.kv.set(statsKey, stats);
+            }
+        }
+
+        return jsonSuccess({ received: true });
+    } catch (e) {
+        console.error('Webhook error:', e);
+        return jsonError(500, 'Webhook processing failed');
+    }
+});
+
+==== FILE: C:\Users\user\Desktop\roomify\lib\server.validation.ts ====
+
+// FILE: C:\Users\user\Desktop\roomify\lib\server.validation.ts
+
+import puter from "@heyputer/puter.js";
+import { PUTER_WORKER_URL } from "./constants";
+
+export interface ServerValidationResult {
+    allowed: boolean;
+    remaining?: number;
+    isPremium?: boolean;
+    error?: string;
+}
+
+export const validateRenderLimitOnServer = async (userId: string): Promise<ServerValidationResult> => {
+    if (!PUTER_WORKER_URL) {
+        return { allowed: true, error: 'Worker URL not configured' };
+    }
+
+    try {
+        const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/validate/render`, {
+            method: 'POST',
+            body: JSON.stringify({ userId })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            return { allowed: false, error: error.error || 'Validation failed' };
+        }
+
+        const data = await response.json();
+        return {
+            allowed: data.allowed,
+            remaining: data.remaining,
+            isPremium: data.isPremium
+        };
+    } catch (error) {
+        console.error('Server validation failed:', error);
+        return { allowed: false, error: 'Failed to validate with server' };
+    }
+};
+
+export const incrementRenderCountOnServer = async (userId: string): Promise<ServerValidationResult> => {
+    if (!PUTER_WORKER_URL) {
+        return { allowed: true, error: 'Worker URL not configured' };
+    }
+
+    try {
+        const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/usage/increment/render`, {
+            method: 'POST',
+            body: JSON.stringify({ userId })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            return { allowed: false, error: error.error || 'Failed to increment' };
+        }
+
+        const data = await response.json();
+        return {
+            allowed: true,
+            remaining: data.remaining,
+            isPremium: data.isPremium
+        };
+    } catch (error) {
+        console.error('Failed to increment render count:', error);
+        return { allowed: false, error: 'Failed to increment render count' };
+    }
+};
+
+export const incrementExportCountOnServer = async (userId: string): Promise<ServerValidationResult> => {
+    if (!PUTER_WORKER_URL) {
+        return { allowed: true, error: 'Worker URL not configured' };
+    }
+
+    try {
+        const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/usage/increment/export`, {
+            method: 'POST',
+            body: JSON.stringify({ userId })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            return { allowed: false, error: error.error || 'Failed to increment' };
+        }
+
+        const data = await response.json();
+        return {
+            allowed: true,
+            remaining: data.remaining,
+            isPremium: data.isPremium
+        };
+    } catch (error) {
+        console.error('Failed to increment export count:', error);
+        return { allowed: false, error: 'Failed to increment export count' };
+    }
+};
+
+export const incrementPDFExportCountOnServer = async (userId: string): Promise<ServerValidationResult> => {
+    if (!PUTER_WORKER_URL) {
+        return { allowed: true, error: 'Worker URL not configured' };
+    }
+
+    try {
+        const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/usage/increment/pdf`, {
+            method: 'POST',
+            body: JSON.stringify({ userId })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            return { allowed: false, error: error.error || 'Failed to increment' };
+        }
+
+        const data = await response.json();
+        return {
+            allowed: true,
+            remaining: data.remaining,
+            isPremium: data.isPremium
+        };
+    } catch (error) {
+        console.error('Failed to increment PDF export count:', error);
+        return { allowed: false, error: 'Failed to increment PDF export count' };
+    }
+};
+
+export const getServerUsageStats = async (userId: string): Promise<{
+    rendersUsed: number;
+    rendersRemaining: number;
+    exportsUsed: number;
+    exportsRemaining: number;
+    pdfsUsed: number;
+    pdfsRemaining: number;
+    isPremium: boolean;
+    subscriptionType?: string;
+    subscriptionEndDate?: string;
+} | null> => {
+    if (!PUTER_WORKER_URL) {
+        return null;
+    }
+
+    try {
+        const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/usage/stats`, {
+            method: 'GET'
+        });
+
+        if (!response.ok) {
+            console.error('Failed to get usage stats');
+            return null;
+        }
+
+        const data = await response.json();
+        return {
+            rendersUsed: data.rendersUsed,
+            rendersRemaining: data.rendersRemaining,
+            exportsUsed: data.exportsUsed,
+            exportsRemaining: data.exportsRemaining,
+            pdfsUsed: data.pdfsUsed,
+            pdfsRemaining: data.pdfsRemaining,
+            isPremium: data.isPremium,
+            subscriptionType: data.subscriptionType,
+            subscriptionEndDate: data.subscriptionEndDate
+        };
+    } catch (error) {
+        console.error('Failed to get usage stats:', error);
+        return null;
+    }
+};
+
+==== FILE: C:\Users\user\Desktop\roomify\lib\stripe.config.ts ====
+
+// FILE: C:\Users\user\Desktop\roomify\lib\stripe.config.ts
+
+import { loadStripe } from '@stripe/stripe-js';
+
+// Replace with your actual Stripe publishable key
+export const STRIPE_PUBLISHABLE_KEY = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
+
+export const STRIPE_PRICES = {
+    monthly: import.meta.env.VITE_STRIPE_PRICE_MONTHLY || 'price_monthly_123',
+    yearly: import.meta.env.VITE_STRIPE_PRICE_YEARLY || 'price_yearly_456',
+};
+
+export const getStripe = async () => {
+    if (!STRIPE_PUBLISHABLE_KEY) {
+        console.error('Stripe publishable key not configured');
+        return null;
+    }
+    return await loadStripe(STRIPE_PUBLISHABLE_KEY);
+};
+
+==== FILE: C:\Users\user\Desktop\roomify\lib\style.utils.ts ====
+
+// FILE: C:\Users\user\Desktop\roomify\lib\style.utils.ts
+
+import type { DesignStyle } from './types';
+import { STYLE_OPTIONS } from './constants';
+
+export const getStyleName = (styleId: DesignStyle): string => {
+    const style = STYLE_OPTIONS.find(s => s.id === styleId);
+    return style?.name || styleId;
+};
+
+export const getStyleIcon = (styleId: DesignStyle): string => {
+    const style = STYLE_OPTIONS.find(s => s.id === styleId);
+    return style?.icon || 'ðŸŽ¨';
+};
+
+export const getStyleDescription = (styleId: DesignStyle): string => {
+    const style = STYLE_OPTIONS.find(s => s.id === styleId);
+    return style?.description || '';
+};
+
+export const isValidStyle = (style: string): style is DesignStyle => {
+    return STYLE_OPTIONS.some(s => s.id === style);
+};
+
+export const getAvailableStyles = (existingStyles?: Record<DesignStyle, string>): DesignStyle[] => {
+    if (!existingStyles) return STYLE_OPTIONS.map(s => s.id);
+    return STYLE_OPTIONS.filter(s => !existingStyles[s.id]).map(s => s.id);
+};
+
+export const getGeneratedStylesCount = (existingStyles?: Record<DesignStyle, string>): number => {
+    if (!existingStyles) return 0;
+    return Object.keys(existingStyles).length;
+};
+
+export const getNextRecommendedStyle = (existingStyles?: Record<DesignStyle, string>): DesignStyle | null => {
+    const available = getAvailableStyles(existingStyles);
+    if (available.length === 0) return null;
+    
+    // Return most popular styles first
+    const priorityOrder: DesignStyle[] = ['modern', 'scandinavian', 'industrial', 'rustic', 'bohemian'];
+    for (const style of priorityOrder) {
+        if (available.includes(style)) return style;
+    }
+    
+    return available[0];
+};
+
+==== FILE: C:\Users\user\Desktop\roomify\lib\types.ts ====
+
+// FILE: C:\Users\user\Desktop\roomify\lib\types.ts
+
+import type { PresetCategory } from './presets';
+
+export interface AuthState {
+    isSignedIn: boolean;
+    userName: string | null;
+    userId: string | null;
+}
+
+export interface Material {
+    id: string;
+    name: string;
+    thumbnail: string;
+    type: "color" | "texture";
+    category: "floor" | "wall" | "furniture";
+}
+
+export type DesignStyle = 'modern' | 'rustic' | 'industrial' | 'scandinavian' | 'bohemian';
+
+export interface DesignItem {
+    id: string;
+    name?: string | null;
+    sourceImage: string;
+    sourcePath?: string | null;
+    renderedImage?: string | null;
+    renderedPath?: string | null;
+    publicPath?: string | null;
+    timestamp: number;
+    ownerId?: string | null;
+    sharedBy?: string | null;
+    sharedAt?: string | null;
+    isPublic?: boolean;
+    shareToken?: string | null;
+    style?: DesignStyle;
+    preset?: PresetCategory;
+    renderedStyles?: Record<DesignStyle, string>;
+    renderedPresets?: Record<string, string>;
+    viewCount?: number;
+    likeCount?: number;
+}
+
+export interface DesignConfig {
+    floor: string;
+    walls: string;
+    style: string;
+}
+
+export enum AppStatus {
+    IDLE = "IDLE",
+    UPLOADING = "UPLOADING",
+    PROCESSING = "PROCESSING",
+    READY = "READY",
+}
+
+export type RenderCompletePayload = {
+    renderedImage: string;
+    renderedPath?: string;
+    style?: DesignStyle;
+    preset?: PresetCategory;
+};
+
+export type VisualizerLocationState = {
+    initialImage?: string;
+    initialRender?: string | null;
+    ownerId?: string | null;
+    name?: string | null;
+    sharedBy?: string | null;
+    isPublicView?: boolean;
+};
+
+export interface VisualizerProps {
+    onBack: () => void;
+    initialImage: string | null;
+    onRenderComplete?: (payload: RenderCompletePayload) => void;
+    onShare?: (image: string) => Promise<void> | void;
+    onUnshare?: (image: string) => Promise<void> | void;
+    projectName?: string;
+    projectId?: string;
+    initialRender?: string | null;
+    isPublic?: boolean;
+    sharedBy?: string | null;
+    canUnshare?: boolean;
+    isPublicView?: boolean;
+}
+
+export interface UploadProps {
+    onComplete: (base64File: string) => Promise<boolean | void> | boolean | void;
+    className?: string;
+}
+
+export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+    variant?: "primary" | "secondary" | "ghost" | "outline";
+    size?: "sm" | "md" | "lg";
+    fullWidth?: boolean;
+}
+
+export interface CardProps {
+    children: React.ReactNode;
+    className?: string;
+    title?: string;
+    action?: React.ReactNode;
+}
+
+export type AuthContext = {
+    isSignedIn: boolean;
+    userName: string | null;
+    userId: string | null;
+    refreshAuth: () => Promise<boolean>;
+    signIn: () => Promise<boolean>;
+    signOut: () => Promise<boolean>;
+};
+
+export type AuthRequiredModalProps = {
+    isOpen: boolean;
+    onConfirm: () => void;
+    onCancel: () => void;
+    title?: string;
+    description?: string;
+    confirmLabel?: string;
+};
+
+export type ShareAction = "share" | "unshare";
+export type ShareStatus = "idle" | "saving" | "done";
+
+export type HostingConfig = { subdomain: string };
+export type HostedAsset = { url: string };
+
+export interface StoreHostedImageParams {
+    hosting: HostingConfig | null;
+    url: string;
+    projectId: string;
+    label: "source" | "rendered";
+}
+
+export interface CreateProjectParams {
+    item: DesignItem;
+    visibility?: "private" | "public";
+}
+
+export interface Generate3DViewParams {
+    sourceImage: string;
+    projectId?: string | null;
+    style?: DesignStyle;
+    preset?: PresetCategory;
+}
+
+// Public Gallery Types
+export interface PublicProject extends DesignItem {
+    ownerName?: string;
+    isLiked?: boolean;
+}
+
+export interface GalleryFilter {
+    sortBy: 'recent' | 'popular' | 'mostLiked';
+    style?: DesignStyle;
+    preset?: PresetCategory;
+    search?: string;
+}
+
+==== FILE: C:\Users\user\Desktop\roomify\lib\usage.tracker.ts ====
+
+// FILE: C:\Users\user\Desktop\roomify\lib\usage.tracker.ts
+
+import puter from "@heyputer/puter.js";
+
+// HARD LIMITS - FREE PLAN
+export const USAGE_LIMITS = {
+    FREE_RENDERS: 3,        // MAX 3 renders per month
+    FREE_EXPORTS: 5,        // MAX 5 exports per month
+    FREE_PDF_EXPORTS: 2,    // MAX 2 PDF exports per month
+    FREE_HIGH_RES: false,    // No high-res for free
+    PREMIUM_STYLES: ['industrial', 'scandinavian'], // Locked for free
+    PREMIUM_PRESETS: ['luxury', 'traditional']      // Locked for free
+};
+
+// Pro Pricing
+export const PRO_PRICE = {
+    monthly: 19,
+    yearly: 159,
+    currency: 'USD',
+    monthlyInterval: 'month',
+    yearlyInterval: 'year'
+};
+
+export interface UsageStats {
+    renderCount: number;
+    exportCount: number;
+    pdfExportCount: number;
+    lastResetDate: string;
+    isPremium: boolean;
+    subscriptionType?: 'monthly' | 'yearly';
+    subscriptionEndDate?: string;
+    upgradeTriggerShown?: {
+        renderLimit?: boolean;
+        exportLimit?: boolean;
+        pdfLimit?: boolean;
+        premiumStyle?: boolean;
+        premiumPreset?: boolean;
+        watermark?: boolean;
+    };
+}
+
+const USAGE_KEY_PREFIX = 'roomify_usage_';
+
+export const getUserUsageKey = (userId: string): string => {
+    return `${USAGE_KEY_PREFIX}${userId}`;
+};
+
+export const getCurrentUser = async (): Promise<any> => {
+    try {
+        return await puter.auth.getUser();
+    } catch {
+        return null;
+    }
+};
+
+export const getUsageStats = async (userId: string): Promise<UsageStats> => {
+    try {
+        const key = getUserUsageKey(userId);
+        const stats = await puter.kv.get(key) as UsageStats | null;
+        
+        if (!stats) {
+            const newStats: UsageStats = {
+                renderCount: 0,
+                exportCount: 0,
+                pdfExportCount: 0,
+                lastResetDate: new Date().toISOString(),
+                isPremium: false,
+                upgradeTriggerShown: {}
+            };
+            await puter.kv.set(key, newStats);
+            return newStats;
+        }
+        
+        // Check if premium subscription has expired
+        if (stats.isPremium && stats.subscriptionEndDate) {
+            const endDate = new Date(stats.subscriptionEndDate);
+            const now = new Date();
+            if (now > endDate) {
+                const expiredStats: UsageStats = {
+                    ...stats,
+                    isPremium: false,
+                    subscriptionType: undefined,
+                    subscriptionEndDate: undefined,
+                    renderCount: 0,
+                    exportCount: 0,
+                    pdfExportCount: 0,
+                    lastResetDate: now.toISOString(),
+                    upgradeTriggerShown: {}
+                };
+                await puter.kv.set(key, expiredStats);
+                return expiredStats;
+            }
+        }
+        
+        // Monthly reset for free users
+        const lastReset = new Date(stats.lastResetDate);
+        const now = new Date();
+        const monthsDiff = (now.getFullYear() - lastReset.getFullYear()) * 12 + (now.getMonth() - lastReset.getMonth());
+        
+        if (monthsDiff >= 1 && !stats.isPremium) {
+            const resetStats: UsageStats = {
+                ...stats,
+                renderCount: 0,
+                exportCount: 0,
+                pdfExportCount: 0,
+                lastResetDate: now.toISOString(),
+                isPremium: false,
+                upgradeTriggerShown: {}
+            };
+            await puter.kv.set(key, resetStats);
+            return resetStats;
+        }
+        
+        return stats;
+    } catch (error) {
+        console.error('Failed to get usage stats:', error);
+        return {
+            renderCount: USAGE_LIMITS.FREE_RENDERS,
+            exportCount: USAGE_LIMITS.FREE_EXPORTS,
+            pdfExportCount: USAGE_LIMITS.FREE_PDF_EXPORTS,
+            lastResetDate: new Date().toISOString(),
+            isPremium: false,
+            upgradeTriggerShown: {}
+        };
+    }
+};
+
+export const incrementRenderCount = async (userId: string): Promise<UsageStats> => {
+    const stats = await getUsageStats(userId);
+    if (!stats.isPremium) {
+        stats.renderCount++;
+    }
+    await puter.kv.set(getUserUsageKey(userId), stats);
+    return stats;
+};
+
+export const incrementExportCount = async (userId: string): Promise<UsageStats> => {
+    const stats = await getUsageStats(userId);
+    if (!stats.isPremium) {
+        stats.exportCount++;
+    }
+    await puter.kv.set(getUserUsageKey(userId), stats);
+    return stats;
+};
+
+export const incrementPDFExportCount = async (userId: string): Promise<UsageStats> => {
+    const stats = await getUsageStats(userId);
+    if (!stats.isPremium) {
+        stats.pdfExportCount++;
+    }
+    await puter.kv.set(getUserUsageKey(userId), stats);
+    return stats;
+};
+
+// SERVER-SIDE VALIDATION - HARD CHECKS
+export const validateRenderLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string }> => {
+    const stats = await getUsageStats(userId);
+    
+    if (stats.isPremium) {
+        return { allowed: true, remaining: Infinity, message: 'Pro user - unlimited renders' };
+    }
+    
+    const remaining = USAGE_LIMITS.FREE_RENDERS - stats.renderCount;
+    
+    if (remaining <= 0) {
+        return {
+            allowed: false,
+            remaining: 0,
+            message: `RENDER_LIMIT_EXCEEDED: You've used all ${USAGE_LIMITS.FREE_RENDERS} free renders. Upgrade to Pro.`
+        };
+    }
+    
+    return {
+        allowed: true,
+        remaining,
+        message: `${remaining} renders remaining`
+    };
+};
+
+export const validateExportLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string }> => {
+    const stats = await getUsageStats(userId);
+    
+    if (stats.isPremium) {
+        return { allowed: true, remaining: Infinity, message: 'Pro user - unlimited exports' };
+    }
+    
+    const remaining = USAGE_LIMITS.FREE_EXPORTS - stats.exportCount;
+    
+    if (remaining <= 0) {
+        return {
+            allowed: false,
+            remaining: 0,
+            message: `EXPORT_LIMIT_EXCEEDED: You've used all ${USAGE_LIMITS.FREE_EXPORTS} free exports. Upgrade to Pro.`
+        };
+    }
+    
+    return {
+        allowed: true,
+        remaining,
+        message: `${remaining} exports remaining`
+    };
+};
+
+export const validatePDFExportLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string }> => {
+    const stats = await getUsageStats(userId);
+    
+    if (stats.isPremium) {
+        return { allowed: true, remaining: Infinity, message: 'Pro user - unlimited PDF exports' };
+    }
+    
+    const remaining = USAGE_LIMITS.FREE_PDF_EXPORTS - stats.pdfExportCount;
+    
+    if (remaining <= 0) {
+        return {
+            allowed: false,
+            remaining: 0,
+            message: `PDF_LIMIT_EXCEEDED: You've used all ${USAGE_LIMITS.FREE_PDF_EXPORTS} free PDF exports. Upgrade to Pro.`
+        };
+    }
+    
+    return {
+        allowed: true,
+        remaining,
+        message: `${remaining} PDF exports remaining`
+    };
+};
+
+export const validatePremiumStyle = (styleId: string, isPremiumUser: boolean): { allowed: boolean; message?: string } => {
+    const isPremiumStyle = USAGE_LIMITS.PREMIUM_STYLES.includes(styleId as any);
+    
+    if (isPremiumStyle && !isPremiumUser) {
+        return {
+            allowed: false,
+            message: `PREMIUM_FEATURE: ${styleId} style requires Pro subscription. Upgrade to access.`
+        };
+    }
+    
+    return { allowed: true };
+};
+
+export const validatePremiumPreset = (presetId: string, isPremiumUser: boolean): { allowed: boolean; message?: string } => {
+    const isPremiumPreset = USAGE_LIMITS.PREMIUM_PRESETS.includes(presetId as any);
+    
+    if (isPremiumPreset && !isPremiumUser) {
+        return {
+            allowed: false,
+            message: `PREMIUM_FEATURE: ${presetId} preset requires Pro subscription. Upgrade to access.`
+        };
+    }
+    
+    return { allowed: true };
+};
+
+// Server-side endpoint validation (for worker)
+export const validateRequest = async (userId: string, action: 'render' | 'export' | 'pdf'): Promise<{ valid: boolean; error?: string }> => {
+    let validation;
+    switch (action) {
+        case 'render':
+            validation = await validateRenderLimit(userId);
+            break;
+        case 'export':
+            validation = await validateExportLimit(userId);
+            break;
+        case 'pdf':
+            validation = await validatePDFExportLimit(userId);
+            break;
+        default:
+            return { valid: false, error: 'Unknown action' };
+    }
+    
+    if (!validation.allowed) {
+        return { valid: false, error: validation.message };
+    }
+    
+    return { valid: true };
+};
+
+export const checkRenderLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string; showUpgrade?: boolean }> => {
+    const stats = await getUsageStats(userId);
+    
+    if (stats.isPremium) {
+        return { allowed: true, remaining: Infinity, message: 'Pro user - unlimited renders' };
+    }
+    
+    const remaining = USAGE_LIMITS.FREE_RENDERS - stats.renderCount;
+    const showUpgrade = remaining <= 1 || stats.renderCount >= USAGE_LIMITS.FREE_RENDERS - 1;
+    
+    if (remaining <= 0) {
+        return {
+            allowed: false,
+            remaining: 0,
+            message: `âš ï¸ You've reached your free limit of ${USAGE_LIMITS.FREE_RENDERS} renders. Upgrade to Pro for unlimited renders!`,
+            showUpgrade: true
+        };
+    }
+    
+    if (remaining === 1) {
+        return {
+            allowed: true,
+            remaining,
+            message: `âš ï¸ Last free render! After this, upgrade to Pro for unlimited renders.`,
+            showUpgrade: true
+        };
+    }
+    
+    return {
+        allowed: true,
+        remaining,
+        message: `You have ${remaining} free render${remaining !== 1 ? 's' : ''} remaining this month`,
+        showUpgrade: false
+    };
+};
+
+export const checkExportLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string; showUpgrade?: boolean }> => {
+    const stats = await getUsageStats(userId);
+    
+    if (stats.isPremium) {
+        return { allowed: true, remaining: Infinity, message: 'Pro user - unlimited exports' };
+    }
+    
+    const remaining = USAGE_LIMITS.FREE_EXPORTS - stats.exportCount;
+    const showUpgrade = remaining <= 1 || stats.exportCount >= USAGE_LIMITS.FREE_EXPORTS - 1;
+    
+    if (remaining <= 0) {
+        return {
+            allowed: false,
+            remaining: 0,
+            message: `âš ï¸ You've reached your free limit of ${USAGE_LIMITS.FREE_EXPORTS} exports. Upgrade to Pro for unlimited exports!`,
+            showUpgrade: true
+        };
+    }
+    
+    if (remaining === 1) {
+        return {
+            allowed: true,
+            remaining,
+            message: `âš ï¸ Last free export! After this, upgrade to Pro for unlimited exports.`,
+            showUpgrade: true
+        };
+    }
+    
+    return {
+        allowed: true,
+        remaining,
+        message: `You have ${remaining} free export${remaining !== 1 ? 's' : ''} remaining this month`,
+        showUpgrade: false
+    };
+};
+
+export const checkPDFExportLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string; showUpgrade?: boolean }> => {
+    const stats = await getUsageStats(userId);
+    
+    if (stats.isPremium) {
+        return { allowed: true, remaining: Infinity, message: 'Pro user - unlimited PDF exports' };
+    }
+    
+    const remaining = USAGE_LIMITS.FREE_PDF_EXPORTS - stats.pdfExportCount;
+    const showUpgrade = remaining <= 1 || stats.pdfExportCount >= USAGE_LIMITS.FREE_PDF_EXPORTS - 1;
+    
+    if (remaining <= 0) {
+        return {
+            allowed: false,
+            remaining: 0,
+            message: `âš ï¸ You've reached your free limit of ${USAGE_LIMITS.FREE_PDF_EXPORTS} PDF exports. Upgrade to Pro for unlimited PDF exports!`,
+            showUpgrade: true
+        };
+    }
+    
+    if (remaining === 1) {
+        return {
+            allowed: true,
+            remaining,
+            message: `âš ï¸ Last free PDF export! After this, upgrade to Pro for unlimited PDF exports.`,
+            showUpgrade: true
+        };
+    }
+    
+    return {
+        allowed: true,
+        remaining,
+        message: `You have ${remaining} free PDF export${remaining !== 1 ? 's' : ''} remaining this month`,
+        showUpgrade: false
+    };
+};
+
+export const checkHighResAccess = async (userId: string): Promise<boolean> => {
+    const stats = await getUsageStats(userId);
+    return stats.isPremium;
+};
+
+export const checkPremiumStyle = (styleId: string): { isFree: boolean; showUpgrade: boolean; message?: string } => {
+    const isPremium = USAGE_LIMITS.PREMIUM_STYLES.includes(styleId as any);
+    
+    if (isPremium) {
+        return {
+            isFree: false,
+            showUpgrade: true,
+            message: `âœ¨ ${styleId.charAt(0).toUpperCase() + styleId.slice(1)} style is a Pro feature. Upgrade to unlock all premium styles!`
+        };
+    }
+    
+    return {
+        isFree: true,
+        showUpgrade: false
+    };
+};
+
+export const checkPremiumPreset = (presetId: string): { isFree: boolean; showUpgrade: boolean; message?: string } => {
+    const isPremium = USAGE_LIMITS.PREMIUM_PRESETS.includes(presetId as any);
+    
+    if (isPremium) {
+        return {
+            isFree: false,
+            showUpgrade: true,
+            message: `ðŸ’Ž ${presetId.charAt(0).toUpperCase() + presetId.slice(1)} preset is a Pro feature. Upgrade to unlock all premium presets!`
+        };
+    }
+    
+    return {
+        isFree: true,
+        showUpgrade: false
+    };
+};
+
+export const getPremiumFeatures = (): string[] => {
+    return [
+        'Unlimited renders',
+        'Unlimited exports (PNG/PDF)',
+        'No watermark on exports',
+        'All premium styles: ' + USAGE_LIMITS.PREMIUM_STYLES.join(', '),
+        'All premium presets: ' + USAGE_LIMITS.PREMIUM_PRESETS.join(', '),
+        'Priority processing',
+        'Email support'
+    ];
+};
+
+export const upgradeToPro = async (userId: string, subscriptionType: 'monthly' | 'yearly' = 'monthly'): Promise<void> => {
+    const stats = await getUsageStats(userId);
+    stats.isPremium = true;
+    stats.subscriptionType = subscriptionType;
+    
+    const endDate = new Date();
+    if (subscriptionType === 'yearly') {
+        endDate.setDate(endDate.getDate() + 365);
+    } else {
+        endDate.setDate(endDate.getDate() + 30);
+    }
+    stats.subscriptionEndDate = endDate.toISOString();
+    
+    await puter.kv.set(getUserUsageKey(userId), stats);
+};
+
+export const getRemainingUsage = async (userId: string): Promise<{
+    rendersRemaining: number;
+    exportsRemaining: number;
+    pdfExportsRemaining: number;
+    isPremium: boolean;
+    subscriptionType?: string;
+}> => {
+    const stats = await getUsageStats(userId);
+    
+    return {
+        rendersRemaining: stats.isPremium ? Infinity : Math.max(0, USAGE_LIMITS.FREE_RENDERS - stats.renderCount),
+        exportsRemaining: stats.isPremium ? Infinity : Math.max(0, USAGE_LIMITS.FREE_EXPORTS - stats.exportCount),
+        pdfExportsRemaining: stats.isPremium ? Infinity : Math.max(0, USAGE_LIMITS.FREE_PDF_EXPORTS - stats.pdfExportCount),
+        isPremium: stats.isPremium,
+        subscriptionType: stats.subscriptionType
+    };
+};
+
+==== FILE: C:\Users\user\Desktop\roomify\lib\utils.ts ====
+
+export const HOSTING_CONFIG_KEY = "roomify_hosting_config";
+export const HOSTING_DOMAIN_SUFFIX = ".puter.site";
+
+export const isHostedUrl = (value: unknown): value is string =>
+    typeof value === "string" && value.includes(HOSTING_DOMAIN_SUFFIX);
+
+export const createHostingSlug = () =>
+    `roomify-${Date.now().toString(36)}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+
+const normalizeHost = (subdomain: string) =>
+    subdomain.endsWith(HOSTING_DOMAIN_SUFFIX)
+        ? subdomain
+        : `${subdomain}${HOSTING_DOMAIN_SUFFIX}`;
+
+export const getHostedUrl = (
+    hosting: { subdomain: string },
+    filePath: string,
+): string | null => {
+    if (!hosting?.subdomain) return null;
+    const host = normalizeHost(hosting.subdomain);
+    return `https://${host}/${filePath}`;
+};
+
+export const getImageExtension = (contentType: string, url: string): string => {
+    const type = (contentType || "").toLowerCase();
+    const typeMatch = type.match(/image\/(png|jpe?g|webp|gif|svg\+xml|svg)/);
+    if (typeMatch?.[1]) {
+        const ext = typeMatch[1].toLowerCase();
+        return ext === "jpeg" || ext === "jpg"
+            ? "jpg"
+            : ext === "svg+xml"
+                ? "svg"
+                : ext;
+    }
+
+    const dataMatch = url.match(/^data:image\/([a-z0-9+.-]+);/i);
+    if (dataMatch?.[1]) {
+        const ext = dataMatch[1].toLowerCase();
+        return ext === "jpeg" ? "jpg" : ext;
+    }
+
+    const extMatch = url.match(/\.([a-z0-9]+)(?:$|[?#])/i);
+    if (extMatch?.[1]) return extMatch[1].toLowerCase();
+
+    return "png";
+};
+
+export const dataUrlToBlob = (
+    dataUrl: string,
+): { blob: Blob; contentType: string } | null => {
+    try {
+        const match = dataUrl.match(/^data:([^;]+)?(;base64)?,([\s\S]*)$/i);
+        if (!match) return null;
+        const contentType = match[1] || "";
+        const isBase64 = !!match[2];
+        const data = match[3] || "";
+        const raw = isBase64
+            ? atob(data.replace(/\s/g, ""))
+            : decodeURIComponent(data);
+        const bytes = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; i += 1) {
+            bytes[i] = raw.charCodeAt(i);
+        }
+        return { blob: new Blob([bytes], { type: contentType }), contentType };
+    } catch {
+        return null;
+    }
+};
+
+export const fetchBlobFromUrl = async (
+    url: string,
+): Promise<{ blob: Blob; contentType: string } | null> => {
+    if (url.startsWith("data:")) {
+        return dataUrlToBlob(url);
+    }
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("Failed to fetch image");
+        return {
+            blob: await response.blob(),
+            contentType: response.headers.get("content-type") || "",
+        };
+    } catch {
+        return null;
+    }
+};
+
+export const imageUrlToPngBlob = async (url: string): Promise<Blob | null> => {
+    if (typeof window === "undefined") return null;
+
+    try {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+
+        const loaded = await new Promise<HTMLImageElement>((resolve, reject) => {
+            img.onload = () => resolve(img);
+            img.onerror = () => reject(new Error("Failed to load image"));
+            img.src = url;
+        });
+
+        const width = loaded.naturalWidth || loaded.width;
+        const height = loaded.naturalHeight || loaded.height;
+        if (!width || !height) return null;
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return null;
+
+        ctx.drawImage(loaded, 0, 0, width, height);
+
+        return await new Promise<Blob | null>((resolve) => {
+            canvas.toBlob((result) => resolve(result), "image/png");
+        });
+    } catch {
+        return null;
+    }
+};
+
+==== FILE: C:\Users\user\Desktop\roomify\lib\watermark.ts ====
+
+// FILE: C:\Users\user\Desktop\roomify\lib\watermark.ts
+
+export const addWatermark = async (
+    imageDataUrl: string, 
+    isPremium: boolean
+): Promise<string> => {
+    // No watermark for premium users
+    if (isPremium) return imageDataUrl;
+    
+    // If it's already a data URL, we can process it directly
+    if (imageDataUrl.startsWith('data:')) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                
+                if (!ctx) {
+                    resolve(imageDataUrl);
+                    return;
+                }
+                
+                // Draw original image
+                ctx.drawImage(img, 0, 0);
+                
+                // Add semi-transparent overlay at bottom
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+                ctx.fillRect(0, canvas.height - 70, canvas.width, 70);
+                
+                // Add watermark text
+                const fontSize = Math.max(12, canvas.width / 45);
+                ctx.font = `${fontSize}px "Inter", system-ui, -apple-system, sans-serif`;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+                ctx.textAlign = 'center';
+                ctx.fillText(
+                    'Generated with Roomify (Free Plan)', 
+                    canvas.width / 2, 
+                    canvas.height - 35
+                );
+                
+                // Add upgrade CTA in smaller font with correct pricing
+                const ctaFontSize = Math.max(10, canvas.width / 55);
+                ctx.font = `${ctaFontSize}px "Inter", system-ui, -apple-system, sans-serif`;
+                ctx.fillStyle = 'rgba(249, 115, 22, 0.95)';
+                ctx.fillText(
+                    'Upgrade to Pro - $19/mo â€¢ No Watermark', 
+                    canvas.width / 2, 
+                    canvas.height - 15
+                );
+                
+                resolve(canvas.toDataURL('image/jpeg', 0.95));
+            };
+            img.onerror = () => {
+                console.warn('Failed to load image for watermark, returning original');
+                resolve(imageDataUrl);
+            };
+            img.src = imageDataUrl;
+        });
+    }
+    
+    // For external URLs, fetch and convert to data URL first
+    try {
+        const response = await fetch(imageDataUrl, {
+            mode: 'cors',
+            credentials: 'omit'
+        });
+        const blob = await response.blob();
+        const dataUrl = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(blob);
+        });
+        
+        // Recursively call with data URL
+        return await addWatermark(dataUrl, isPremium);
+    } catch (error) {
+        console.error('Failed to fetch image for watermark:', error);
+        return imageDataUrl;
+    }
+};
+
+// Alternative: Simpler watermark that doesn't require canvas manipulation
+export const addSimpleWatermark = async (
+    imageDataUrl: string,
+    isPremium: boolean
+): Promise<string> => {
+    if (isPremium) return imageDataUrl;
+    
+    // For data URLs, we can process directly
+    if (imageDataUrl.startsWith('data:')) {
+        return addWatermark(imageDataUrl, isPremium);
+    }
+    
+    // For external URLs that might have CORS issues,
+    // we'll return as-is with a note in console
+    console.warn('Cannot add watermark to external URL due to CORS, returning original');
+    return imageDataUrl;
+};

@@ -6,4 +6,6 @@ export default [
     index("routes/home.tsx"),
     route("visualizer/:id", "routes/visualizer.$id.tsx"),
     route("gallery", "routes/gallery.tsx"),
+    route("payment-success", "routes/payment-success.tsx"),
+    route("payment-cancel", "routes/payment-cancel.tsx"),
 ] satisfies RouteConfig;

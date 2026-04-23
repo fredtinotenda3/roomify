@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import { Crown, X, Check, Sparkles, Zap, Shield, TrendingDown } from 'lucide-react';
 import Button from './ui/Button';
+import StripeCheckout from './StripeCheckout';
 import { getPremiumFeatures, PRO_PRICE } from '../lib/usage.tracker';
+import { useOutletContext } from 'react-router';
 
 interface UpgradeModalProps {
     isOpen: boolean;
@@ -16,7 +18,9 @@ interface UpgradeModalProps {
 const UpgradeModal = ({ isOpen, onClose, featureName, remaining, triggerContext }: UpgradeModalProps) => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [billingInterval, setBillingInterval] = useState<'monthly' | 'yearly'>('monthly');
+    const [showStripeCheckout, setShowStripeCheckout] = useState(false);
     const premiumFeatures = getPremiumFeatures();
+    const { userId, userName, userEmail } = useOutletContext<AuthContext>();
 
     const monthlyPrice = PRO_PRICE.monthly;
     const yearlyPrice = PRO_PRICE.yearly;
@@ -61,17 +65,18 @@ const UpgradeModal = ({ isOpen, onClose, featureName, remaining, triggerContext 
         }
     };
 
-    if (!isOpen) return null;
-
-    const handleUpgrade = async () => {
-        setIsProcessing(true);
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        const price = billingInterval === 'monthly' ? monthlyPrice : yearlyPrice;
-        const interval = billingInterval === 'monthly' ? 'month' : 'year';
-        alert(`Pro ${billingInterval} plan - $${price}/${interval}\n\nPayment processing would happen here. Demo mode only.`);
-        setIsProcessing(false);
-        onClose();
+    const handleUpgrade = () => {
+        setShowStripeCheckout(true);
     };
+
+    const handleStripeSuccess = () => {
+        setShowStripeCheckout(false);
+        onClose();
+        // Refresh page to update user status
+        window.location.reload();
+    };
+
+    if (!isOpen) return null;
 
     return (
         <div className="upgrade-modal-overlay" onClick={onClose}>
@@ -80,112 +85,124 @@ const UpgradeModal = ({ isOpen, onClose, featureName, remaining, triggerContext 
                     <X size={20} />
                 </button>
 
-                <div className="modal-header">
-                    <div className="crown-icon">
-                        <Crown size={32} />
-                    </div>
-                    <h2>{getContextualTitle()}</h2>
-                    <p className="context-message">{getContextualMessage()}</p>
-                    {featureName && remaining !== undefined && remaining === 0 && (
-                        <p className="warning">
-                            You've used all free {featureName} for this month
+                {showStripeCheckout ? (
+                    <StripeCheckout
+                        userId={userId || ''}
+                        email={userEmail || userName || ''}
+                        onSuccess={handleStripeSuccess}
+                        onCancel={() => setShowStripeCheckout(false)}
+                        onError={(error) => alert(error)}
+                    />
+                ) : (
+                    <>
+                        <div className="modal-header">
+                            <div className="crown-icon">
+                                <Crown size={32} />
+                            </div>
+                            <h2>{getContextualTitle()}</h2>
+                            <p className="context-message">{getContextualMessage()}</p>
+                            {featureName && remaining !== undefined && remaining === 0 && (
+                                <p className="warning">
+                                    You've used all free {featureName} for this month
+                                </p>
+                            )}
+                            {featureName && remaining !== undefined && remaining > 0 && remaining < 3 && (
+                                <p className="warning">
+                                    Only {remaining} free {featureName} remaining
+                                </p>
+                            )}
+                        </div>
+
+                        <div className="billing-toggle">
+                            <button
+                                className={`toggle-option ${billingInterval === 'monthly' ? 'active' : ''}`}
+                                onClick={() => setBillingInterval('monthly')}
+                            >
+                                Monthly
+                                <span className="price-tag">${monthlyPrice}/mo</span>
+                            </button>
+                            <button
+                                className={`toggle-option ${billingInterval === 'yearly' ? 'active' : ''}`}
+                                onClick={() => setBillingInterval('yearly')}
+                            >
+                                Yearly
+                                <span className="price-tag">${yearlyPrice}/yr</span>
+                                <span className="save-badge">Save ${yearlySavings}</span>
+                            </button>
+                        </div>
+
+                        <div className="savings-banner">
+                            <TrendingDown size={16} />
+                            <span>Yearly plan saves you ${yearlySavings} compared to monthly</span>
+                        </div>
+
+                        <div className="pricing-card">
+                            <div className="price">
+                                <span className="currency">$</span>
+                                <span className="amount">
+                                    {billingInterval === 'monthly' ? monthlyPrice : monthlyEquivalent}
+                                </span>
+                                <span className="period">/month</span>
+                            </div>
+                            {billingInterval === 'yearly' && (
+                                <p className="billed-as">Billed as ${yearlyPrice}/year (${monthlyEquivalent}/mo)</p>
+                            )}
+                            <p className="price-note">Cancel anytime • No commitment • 14-day money-back</p>
+                        </div>
+
+                        <div className="features">
+                            <h3>Pro Includes:</h3>
+                            <ul>
+                                {premiumFeatures.map((feature, index) => (
+                                    <li key={index}>
+                                        <Check size={16} />
+                                        <span>{feature}</span>
+                                    </li>
+                                ))}
+                                <li>
+                                    <Zap size={16} />
+                                    <span>Priority processing (faster renders)</span>
+                                </li>
+                                <li>
+                                    <Shield size={16} />
+                                    <span>Priority email support</span>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div className="modal-actions">
+                            <Button
+                                onClick={handleUpgrade}
+                                className="upgrade-btn"
+                                disabled={isProcessing}
+                                fullWidth
+                            >
+                                {isProcessing ? (
+                                    <>
+                                        <div className="spinner-small" />
+                                        Processing...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Crown size={18} />
+                                        Upgrade to Pro - ${billingInterval === 'monthly' ? monthlyPrice : yearlyPrice}/{billingInterval === 'monthly' ? 'month' : 'year'}
+                                    </>
+                                )}
+                            </Button>
+                            <Button
+                                onClick={onClose}
+                                variant="ghost"
+                                fullWidth
+                            >
+                                Maybe later
+                            </Button>
+                        </div>
+
+                        <p className="guarantee">
+                            🔒 14-day money-back guarantee • Secure payment via Stripe
                         </p>
-                    )}
-                    {featureName && remaining !== undefined && remaining > 0 && remaining < 3 && (
-                        <p className="warning">
-                            Only {remaining} free {featureName} remaining
-                        </p>
-                    )}
-                </div>
-
-                <div className="billing-toggle">
-                    <button
-                        className={`toggle-option ${billingInterval === 'monthly' ? 'active' : ''}`}
-                        onClick={() => setBillingInterval('monthly')}
-                    >
-                        Monthly
-                        <span className="price-tag">${monthlyPrice}/mo</span>
-                    </button>
-                    <button
-                        className={`toggle-option ${billingInterval === 'yearly' ? 'active' : ''}`}
-                        onClick={() => setBillingInterval('yearly')}
-                    >
-                        Yearly
-                        <span className="price-tag">${yearlyPrice}/yr</span>
-                        <span className="save-badge">Save ${yearlySavings}</span>
-                    </button>
-                </div>
-
-                <div className="savings-banner">
-                    <TrendingDown size={16} />
-                    <span>Yearly plan saves you ${yearlySavings} compared to monthly</span>
-                </div>
-
-                <div className="pricing-card">
-                    <div className="price">
-                        <span className="currency">$</span>
-                        <span className="amount">
-                            {billingInterval === 'monthly' ? monthlyPrice : monthlyEquivalent}
-                        </span>
-                        <span className="period">/month</span>
-                    </div>
-                    {billingInterval === 'yearly' && (
-                        <p className="billed-as">Billed as ${yearlyPrice}/year (${monthlyEquivalent}/mo)</p>
-                    )}
-                    <p className="price-note">Cancel anytime • No commitment • 14-day money-back</p>
-                </div>
-
-                <div className="features">
-                    <h3>Pro Includes:</h3>
-                    <ul>
-                        {premiumFeatures.map((feature, index) => (
-                            <li key={index}>
-                                <Check size={16} />
-                                <span>{feature}</span>
-                            </li>
-                        ))}
-                        <li>
-                            <Zap size={16} />
-                            <span>Priority processing (faster renders)</span>
-                        </li>
-                        <li>
-                            <Shield size={16} />
-                            <span>Priority email support</span>
-                        </li>
-                    </ul>
-                </div>
-
-                <div className="modal-actions">
-                    <Button
-                        onClick={handleUpgrade}
-                        className="upgrade-btn"
-                        disabled={isProcessing}
-                        fullWidth
-                    >
-                        {isProcessing ? (
-                            <>
-                                <div className="spinner-small" />
-                                Processing...
-                            </>
-                        ) : (
-                            <>
-                                <Crown size={18} />
-                                Upgrade to Pro - ${billingInterval === 'monthly' ? monthlyPrice : yearlyPrice}/{billingInterval === 'monthly' ? 'month' : 'year'}
-                            </>
-                        )}
-                    </Button>
-                    <Button
-                        onClick={onClose}
-                        variant="ghost"
-                        fullWidth
-                    >
-                        Maybe later
-                    </Button>
-                </div>
-
-                <p className="guarantee">
-                    🔒 14-day money-back guarantee • Secure payment via Stripe
-                </p>
+                    </>
+                )}
             </div>
 
             <style>{`
@@ -207,7 +224,7 @@ const UpgradeModal = ({ isOpen, onClose, featureName, remaining, triggerContext 
                 .upgrade-modal {
                     background: white;
                     border-radius: 1.5rem;
-                    max-width: 500px;
+                    max-width: 550px;
                     width: 100%;
                     max-height: 90vh;
                     overflow-y: auto;
