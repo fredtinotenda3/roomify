@@ -71,6 +71,7 @@ export const getUsageStats = async (userId: string): Promise<UsageStats> => {
             return newStats;
         }
         
+        // Check if premium subscription has expired
         if (stats.isPremium && stats.subscriptionEndDate) {
             const endDate = new Date(stats.subscriptionEndDate);
             const now = new Date();
@@ -91,6 +92,7 @@ export const getUsageStats = async (userId: string): Promise<UsageStats> => {
             }
         }
         
+        // Monthly reset for free users
         const lastReset = new Date(stats.lastResetDate);
         const now = new Date();
         const monthsDiff = (now.getFullYear() - lastReset.getFullYear()) * 12 + (now.getMonth() - lastReset.getMonth());
@@ -150,7 +152,8 @@ export const incrementPDFExportCount = async (userId: string): Promise<UsageStat
     return stats;
 };
 
-export const checkRenderLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string; showUpgrade?: boolean }> => {
+// SERVER-SIDE VALIDATION - HARD CHECKS
+export const validateRenderLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string }> => {
     const stats = await getUsageStats(userId);
     
     if (stats.isPremium) {
@@ -159,7 +162,127 @@ export const checkRenderLimit = async (userId: string): Promise<{ allowed: boole
     
     const remaining = USAGE_LIMITS.FREE_RENDERS - stats.renderCount;
     
-    // Show upgrade prompt when on last render or out of renders
+    if (remaining <= 0) {
+        return {
+            allowed: false,
+            remaining: 0,
+            message: `RENDER_LIMIT_EXCEEDED: You've used all ${USAGE_LIMITS.FREE_RENDERS} free renders. Upgrade to Pro.`
+        };
+    }
+    
+    return {
+        allowed: true,
+        remaining,
+        message: `${remaining} renders remaining`
+    };
+};
+
+export const validateExportLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string }> => {
+    const stats = await getUsageStats(userId);
+    
+    if (stats.isPremium) {
+        return { allowed: true, remaining: Infinity, message: 'Pro user - unlimited exports' };
+    }
+    
+    const remaining = USAGE_LIMITS.FREE_EXPORTS - stats.exportCount;
+    
+    if (remaining <= 0) {
+        return {
+            allowed: false,
+            remaining: 0,
+            message: `EXPORT_LIMIT_EXCEEDED: You've used all ${USAGE_LIMITS.FREE_EXPORTS} free exports. Upgrade to Pro.`
+        };
+    }
+    
+    return {
+        allowed: true,
+        remaining,
+        message: `${remaining} exports remaining`
+    };
+};
+
+export const validatePDFExportLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string }> => {
+    const stats = await getUsageStats(userId);
+    
+    if (stats.isPremium) {
+        return { allowed: true, remaining: Infinity, message: 'Pro user - unlimited PDF exports' };
+    }
+    
+    const remaining = USAGE_LIMITS.FREE_PDF_EXPORTS - stats.pdfExportCount;
+    
+    if (remaining <= 0) {
+        return {
+            allowed: false,
+            remaining: 0,
+            message: `PDF_LIMIT_EXCEEDED: You've used all ${USAGE_LIMITS.FREE_PDF_EXPORTS} free PDF exports. Upgrade to Pro.`
+        };
+    }
+    
+    return {
+        allowed: true,
+        remaining,
+        message: `${remaining} PDF exports remaining`
+    };
+};
+
+export const validatePremiumStyle = (styleId: string, isPremiumUser: boolean): { allowed: boolean; message?: string } => {
+    const isPremiumStyle = USAGE_LIMITS.PREMIUM_STYLES.includes(styleId as any);
+    
+    if (isPremiumStyle && !isPremiumUser) {
+        return {
+            allowed: false,
+            message: `PREMIUM_FEATURE: ${styleId} style requires Pro subscription. Upgrade to access.`
+        };
+    }
+    
+    return { allowed: true };
+};
+
+export const validatePremiumPreset = (presetId: string, isPremiumUser: boolean): { allowed: boolean; message?: string } => {
+    const isPremiumPreset = USAGE_LIMITS.PREMIUM_PRESETS.includes(presetId as any);
+    
+    if (isPremiumPreset && !isPremiumUser) {
+        return {
+            allowed: false,
+            message: `PREMIUM_FEATURE: ${presetId} preset requires Pro subscription. Upgrade to access.`
+        };
+    }
+    
+    return { allowed: true };
+};
+
+// Server-side endpoint validation (for worker)
+export const validateRequest = async (userId: string, action: 'render' | 'export' | 'pdf'): Promise<{ valid: boolean; error?: string }> => {
+    let validation;
+    switch (action) {
+        case 'render':
+            validation = await validateRenderLimit(userId);
+            break;
+        case 'export':
+            validation = await validateExportLimit(userId);
+            break;
+        case 'pdf':
+            validation = await validatePDFExportLimit(userId);
+            break;
+        default:
+            return { valid: false, error: 'Unknown action' };
+    }
+    
+    if (!validation.allowed) {
+        return { valid: false, error: validation.message };
+    }
+    
+    return { valid: true };
+};
+
+export const checkRenderLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string; showUpgrade?: boolean }> => {
+    const stats = await getUsageStats(userId);
+    
+    if (stats.isPremium) {
+        return { allowed: true, remaining: Infinity, message: 'Pro user - unlimited renders' };
+    }
+    
+    const remaining = USAGE_LIMITS.FREE_RENDERS - stats.renderCount;
     const showUpgrade = remaining <= 1 || stats.renderCount >= USAGE_LIMITS.FREE_RENDERS - 1;
     
     if (remaining <= 0) {

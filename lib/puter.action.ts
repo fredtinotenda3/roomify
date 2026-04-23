@@ -5,6 +5,13 @@ import { getOrCreateHostingConfig, uploadImageToHosting } from "./puter.hosting"
 import { isHostedUrl } from "./utils";
 import { PUTER_WORKER_URL } from "./constants";
 import type { DesignItem, CreateProjectParams, PublicProject, GalleryFilter } from "./types";
+import { 
+    validateRenderLimitOnServer,
+    incrementRenderCountOnServer,
+    incrementExportCountOnServer,
+    incrementPDFExportCountOnServer,
+    getServerUsageStats
+} from './server.validation';
 
 export const signIn = async () => await puter.auth.signIn();
 
@@ -361,4 +368,209 @@ export const getPublicProject = async (id: string, shareToken?: string): Promise
         console.error('Failed to get public project:', e);
         return null;
     }
+};
+
+// ============================================
+// SERVER-VALIDATED USAGE FUNCTIONS
+// ============================================
+
+export const incrementRenderCount = async (userId: string): Promise<boolean> => {
+    const result = await incrementRenderCountOnServer(userId);
+    return result.allowed;
+};
+
+export const incrementExportCount = async (userId: string): Promise<boolean> => {
+    const result = await incrementExportCountOnServer(userId);
+    return result.allowed;
+};
+
+export const incrementPDFExportCount = async (userId: string): Promise<boolean> => {
+    const result = await incrementPDFExportCountOnServer(userId);
+    return result.allowed;
+};
+
+export const getRemainingUsage = async (userId: string): Promise<{
+    rendersRemaining: number;
+    exportsRemaining: number;
+    pdfExportsRemaining: number;
+    isPremium: boolean;
+}> => {
+    const stats = await getServerUsageStats(userId);
+    
+    if (!stats) {
+        return {
+            rendersRemaining: 3,
+            exportsRemaining: 5,
+            pdfExportsRemaining: 2,
+            isPremium: false
+        };
+    }
+    
+    return {
+        rendersRemaining: stats.rendersRemaining === Infinity ? Infinity : stats.rendersRemaining,
+        exportsRemaining: stats.exportsRemaining === Infinity ? Infinity : stats.exportsRemaining,
+        pdfExportsRemaining: stats.pdfsRemaining === Infinity ? Infinity : stats.pdfsRemaining,
+        isPremium: stats.isPremium
+    };
+};
+
+export const checkRenderLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string; showUpgrade?: boolean }> => {
+    const stats = await getServerUsageStats(userId);
+    
+    if (!stats) {
+        return { allowed: true, remaining: 3 };
+    }
+    
+    if (stats.isPremium) {
+        return { allowed: true, remaining: Infinity, message: 'Pro user - unlimited renders' };
+    }
+    
+    const remaining = stats.rendersRemaining;
+    const showUpgrade = remaining <= 1;
+    
+    if (remaining <= 0) {
+        return {
+            allowed: false,
+            remaining: 0,
+            message: `⚠️ You've reached your free limit of 3 renders. Upgrade to Pro for unlimited renders!`,
+            showUpgrade: true
+        };
+    }
+    
+    if (remaining === 1) {
+        return {
+            allowed: true,
+            remaining,
+            message: `⚠️ Last free render! After this, upgrade to Pro for unlimited renders.`,
+            showUpgrade: true
+        };
+    }
+    
+    return {
+        allowed: true,
+        remaining,
+        message: `You have ${remaining} free render${remaining !== 1 ? 's' : ''} remaining this month`,
+        showUpgrade: false
+    };
+};
+
+export const checkExportLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string; showUpgrade?: boolean }> => {
+    const stats = await getServerUsageStats(userId);
+    
+    if (!stats) {
+        return { allowed: true, remaining: 5 };
+    }
+    
+    if (stats.isPremium) {
+        return { allowed: true, remaining: Infinity, message: 'Pro user - unlimited exports' };
+    }
+    
+    const remaining = stats.exportsRemaining;
+    const showUpgrade = remaining <= 1;
+    
+    if (remaining <= 0) {
+        return {
+            allowed: false,
+            remaining: 0,
+            message: `⚠️ You've reached your free limit of 5 exports. Upgrade to Pro for unlimited exports!`,
+            showUpgrade: true
+        };
+    }
+    
+    if (remaining === 1) {
+        return {
+            allowed: true,
+            remaining,
+            message: `⚠️ Last free export! After this, upgrade to Pro for unlimited exports.`,
+            showUpgrade: true
+        };
+    }
+    
+    return {
+        allowed: true,
+        remaining,
+        message: `You have ${remaining} free export${remaining !== 1 ? 's' : ''} remaining this month`,
+        showUpgrade: false
+    };
+};
+
+export const checkPDFExportLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string; showUpgrade?: boolean }> => {
+    const stats = await getServerUsageStats(userId);
+    
+    if (!stats) {
+        return { allowed: true, remaining: 2 };
+    }
+    
+    if (stats.isPremium) {
+        return { allowed: true, remaining: Infinity, message: 'Pro user - unlimited PDF exports' };
+    }
+    
+    const remaining = stats.pdfsRemaining;
+    const showUpgrade = remaining <= 1;
+    
+    if (remaining <= 0) {
+        return {
+            allowed: false,
+            remaining: 0,
+            message: `⚠️ You've reached your free limit of 2 PDF exports. Upgrade to Pro for unlimited PDF exports!`,
+            showUpgrade: true
+        };
+    }
+    
+    if (remaining === 1) {
+        return {
+            allowed: true,
+            remaining,
+            message: `⚠️ Last free PDF export! After this, upgrade to Pro for unlimited PDF exports.`,
+            showUpgrade: true
+        };
+    }
+    
+    return {
+        allowed: true,
+        remaining,
+        message: `You have ${remaining} free PDF export${remaining !== 1 ? 's' : ''} remaining this month`,
+        showUpgrade: false
+    };
+};
+
+export const checkHighResAccess = async (userId: string): Promise<boolean> => {
+    const stats = await getServerUsageStats(userId);
+    return stats?.isPremium || false;
+};
+
+export const checkPremiumStyle = (styleId: string): { isFree: boolean; showUpgrade: boolean; message?: string } => {
+    const PREMIUM_STYLES = ['industrial', 'scandinavian'];
+    const isPremium = PREMIUM_STYLES.includes(styleId);
+    
+    if (isPremium) {
+        return {
+            isFree: false,
+            showUpgrade: true,
+            message: `✨ ${styleId.charAt(0).toUpperCase() + styleId.slice(1)} style is a Pro feature. Upgrade to unlock all premium styles!`
+        };
+    }
+    
+    return {
+        isFree: true,
+        showUpgrade: false
+    };
+};
+
+export const checkPremiumPreset = (presetId: string): { isFree: boolean; showUpgrade: boolean; message?: string } => {
+    const PREMIUM_PRESETS = ['luxury', 'traditional'];
+    const isPremium = PREMIUM_PRESETS.includes(presetId);
+    
+    if (isPremium) {
+        return {
+            isFree: false,
+            showUpgrade: true,
+            message: `💎 ${presetId.charAt(0).toUpperCase() + presetId.slice(1)} preset is a Pro feature. Upgrade to unlock all premium presets!`
+        };
+    }
+    
+    return {
+        isFree: true,
+        showUpgrade: false
+    };
 };

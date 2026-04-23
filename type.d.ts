@@ -13,9 +13,9 @@ interface Material {
 }
 
 interface DesignItem {
-    shareToken: any;
-    renderedPresets: any;
-    renderedStyles: any;
+    shareToken?: string;
+    renderedPresets?: Record<string, string>;
+    renderedStyles?: Record<string, string>;
     id: string;
     name?: string | null;
     sourceImage: string;
