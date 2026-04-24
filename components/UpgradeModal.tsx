@@ -1,6 +1,6 @@
-// FILE: C:\Users\user\Desktop\roomify\components\UpgradeModal.tsx
+// FILE: components/UpgradeModal.tsx
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Crown, X, Check, Sparkles, Zap, Shield, TrendingDown } from 'lucide-react';
 import Button from './ui/Button';
 import StripeCheckout from './StripeCheckout';
@@ -19,13 +19,29 @@ const UpgradeModal = ({ isOpen, onClose, featureName, remaining, triggerContext 
     const [isProcessing, setIsProcessing] = useState(false);
     const [billingInterval, setBillingInterval] = useState<'monthly' | 'yearly'>('monthly');
     const [showStripeCheckout, setShowStripeCheckout] = useState(false);
+    const [userEmail, setUserEmail] = useState<string>('');
     const premiumFeatures = getPremiumFeatures();
-    const { userId, userName, userEmail } = useOutletContext<AuthContext>();
+    const { userId, userName } = useOutletContext<AuthContext>();
 
     const monthlyPrice = PRO_PRICE.monthly;
     const yearlyPrice = PRO_PRICE.yearly;
     const monthlyEquivalent = Math.round(yearlyPrice / 12);
     const yearlySavings = (monthlyPrice * 12) - yearlyPrice;
+
+    // Try to get user email from localStorage or ask for it
+    useEffect(() => {
+        const storedEmail = localStorage.getItem('roomify_user_email');
+        if (storedEmail && storedEmail.includes('@')) {
+            setUserEmail(storedEmail);
+        } else if (userName && userName.includes('@')) {
+            setUserEmail(userName);
+        }
+    }, [userName]);
+
+    const handleEmailUpdate = (email: string) => {
+        setUserEmail(email);
+        localStorage.setItem('roomify_user_email', email);
+    };
 
     const getContextualTitle = (): string => {
         switch(triggerContext) {
@@ -88,10 +104,11 @@ const UpgradeModal = ({ isOpen, onClose, featureName, remaining, triggerContext 
                 {showStripeCheckout ? (
                     <StripeCheckout
                         userId={userId || ''}
-                        email={userEmail || userName || ''}
+                        email={userEmail}
                         onSuccess={handleStripeSuccess}
                         onCancel={() => setShowStripeCheckout(false)}
                         onError={(error) => alert(error)}
+                        onEmailUpdate={handleEmailUpdate}
                     />
                 ) : (
                     <>

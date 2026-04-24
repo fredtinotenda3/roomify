@@ -1,6 +1,7 @@
 // FILE: C:\Users\user\Desktop\roomify\lib\usage.tracker.ts
 
 import puter from "@heyputer/puter.js";
+import { PLANS, getUserPlan } from './plans';
 
 // HARD LIMITS - FREE PLAN
 export const USAGE_LIMITS = {
@@ -275,41 +276,6 @@ export const validateRequest = async (userId: string, action: 'render' | 'export
     return { valid: true };
 };
 
-export const checkRenderLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string; showUpgrade?: boolean }> => {
-    const stats = await getUsageStats(userId);
-    
-    if (stats.isPremium) {
-        return { allowed: true, remaining: Infinity, message: 'Pro user - unlimited renders' };
-    }
-    
-    const remaining = USAGE_LIMITS.FREE_RENDERS - stats.renderCount;
-    const showUpgrade = remaining <= 1 || stats.renderCount >= USAGE_LIMITS.FREE_RENDERS - 1;
-    
-    if (remaining <= 0) {
-        return {
-            allowed: false,
-            remaining: 0,
-            message: `⚠️ You've reached your free limit of ${USAGE_LIMITS.FREE_RENDERS} renders. Upgrade to Pro for unlimited renders!`,
-            showUpgrade: true
-        };
-    }
-    
-    if (remaining === 1) {
-        return {
-            allowed: true,
-            remaining,
-            message: `⚠️ Last free render! After this, upgrade to Pro for unlimited renders.`,
-            showUpgrade: true
-        };
-    }
-    
-    return {
-        allowed: true,
-        remaining,
-        message: `You have ${remaining} free render${remaining !== 1 ? 's' : ''} remaining this month`,
-        showUpgrade: false
-    };
-};
 
 export const checkExportLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string; showUpgrade?: boolean }> => {
     const stats = await getUsageStats(userId);
@@ -465,5 +431,45 @@ export const getRemainingUsage = async (userId: string): Promise<{
         pdfExportsRemaining: stats.isPremium ? Infinity : Math.max(0, USAGE_LIMITS.FREE_PDF_EXPORTS - stats.pdfExportCount),
         isPremium: stats.isPremium,
         subscriptionType: stats.subscriptionType
+    };
+};
+
+// Add to usage.tracker.ts - update limit checking to use plan system
+
+export const checkRenderLimit = async (userId: string): Promise<{ allowed: boolean; remaining: number; message?: string; showUpgrade?: boolean }> => {
+    const stats = await getUsageStats(userId);
+    const plan = getUserPlan(stats.isPremium, stats.subscriptionType);
+    const planLimits = PLANS[plan].limits;
+    
+    if (plan !== 'free') {
+        return { allowed: true, remaining: Infinity, message: 'Pro user - unlimited renders' };
+    }
+    
+    const remaining = planLimits.renders - stats.renderCount;
+    const showUpgrade = remaining <= 1;
+    
+    if (remaining <= 0) {
+        return {
+            allowed: false,
+            remaining: 0,
+            message: `⚠️ You've reached your free limit of ${planLimits.renders} renders. Upgrade to Pro for unlimited renders!`,
+            showUpgrade: true
+        };
+    }
+    
+    if (remaining === 1) {
+        return {
+            allowed: true,
+            remaining,
+            message: `⚠️ Last free render! After this, upgrade to Pro for unlimited renders.`,
+            showUpgrade: true
+        };
+    }
+    
+    return {
+        allowed: true,
+        remaining,
+        message: `You have ${remaining} free render${remaining !== 1 ? 's' : ''} remaining this month`,
+        showUpgrade: false
     };
 };

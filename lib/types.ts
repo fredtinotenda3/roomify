@@ -143,6 +143,7 @@ export interface Generate3DViewParams {
     projectId?: string | null;
     style?: DesignStyle;
     preset?: PresetCategory;
+    
 }
 
 // Public Gallery Types
