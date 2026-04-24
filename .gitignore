@@ -11,3 +11,4 @@ secrets.txt
 ".env" 
 ".env.local" 
 ".env.production" 
+"lib/puter.worker.js" 
