@@ -1,0 +1,18 @@
+[33m64eee22[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m feat: Stripe payment integration with live mode
+[33mdfa6118[m feat: Implement Stripe payment integration with premium subscription system
+[33m14221a3[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m feat: Implement complete email backend system for subscriber management and campaigns
+[33m7e7c631[m "feat: Implement complete real analytics storage with backend persistence and dashboard
+[33m39c6127[m feat: Implement complete real analytics storage with backend persistence and dashboard
+[33mec3dc7d[m feat: Implement complete Stripe payment system for Pro subscriptions
+[33m58bf4db[m feat: Implement backend enforcement for render limits, exports, and premium features
+[33m3e16d48[m feat: Implement comprehensive analytics system to track user behavior and conversions
+[33me13ccc0[m feat: Implement email capture system to convert anonymous visitors into leads
+[33m3912509[m feat: Add strategic upgrade triggers at every friction point to drive conversions
+[33ma935a32[m feat: Implement hard paywall enforcement for free tier limits
+[33mfcc297d[m feat: Implement complete Share Link System with public gallery and social sharing
+[33me4e3894[m git add . git commit -m "feat: Add complete Project Dashboard with CRUD operations and fix pricing consistency
+[33ma77d451[m feat: Implement paywall system with Pro subscription ($19/mo or $159/yr)
+[33m52c5efa[m feat: Add style variations, design presets, and PDF export
+[33m2d25955[m fix: Resolve AI generation HTTP2 protocol errors with image compression
+[33m6728e9f[m feat: Implement AI image compression and enhance generation reliability
+[33m8dfdd61[m AI-powered architectural visualization SaaS using React, TypeScript, and Puter.js Use AI models from Claude to Gemini to transform 2D floor plans into photorealistic 3D renders with permanent hosting and persistent metadata. This project features 2D-to-3D photorealistic rendering, serverless workers, high-performance KV storage, and a global community feed
