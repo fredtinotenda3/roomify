@@ -4,6 +4,7 @@
 /node_modules/
 
 secrets.txt
+puter.worker.js
 
 # React Router
 /.react-router/
