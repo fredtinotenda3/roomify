@@ -3,13 +3,19 @@
 .env.local
 /node_modules/
 
+<<<<<<< HEAD
 secrets.txt
 puter.worker.js
 
+=======
+>>>>>>> 8089e2be9097fe403c4df5a813f779fa3165bd5e
 # React Router
 /.react-router/
 /build/
 ".env" 
 ".env.local" 
 ".env.production" 
+<<<<<<< HEAD
 "lib/puter.worker.js" 
+=======
+>>>>>>> 8089e2be9097fe403c4df5a813f779fa3165bd5e
